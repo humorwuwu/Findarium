@@ -139,5 +139,7 @@ The current worker count, load ratio and embedding batch are visible in the stat
 
 ## License
 
-No license is granted yet — this is a personal project. Note that the PDF extractor depends on
-PyMuPDF (AGPL-3.0), so any distribution needs its license reviewed first.
+This project is licensed under the MIT License — see [LICENSE](LICENSE). Note that the PDF
+extractor depends on PyMuPDF (AGPL-3.0), which is not covered by the MIT license; if you
+distribute this software, review that license first or replace the PDF extractor (for example
+with pypdf/pdfplumber).

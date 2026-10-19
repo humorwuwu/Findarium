@@ -127,5 +127,5 @@ PyInstaller 产出的是未签名（ad-hoc）构建，适合本机使用；分�
 
 ## 许可
 
-目前未授予任何许可，这是一个个人项目。注意 PDF 提取依赖 PyMuPDF（AGPL-3.0），任何分发
-前都需要先确认许可问题。
+本项目采用 MIT 许可证，详见 [LICENSE](LICENSE)。注意 PDF 提取依赖 PyMuPDF（AGPL-3.0），
+该依赖不适用 MIT 许可；如需分发，请先评估其许可，或把 PDF 提取器替换为 pypdf/pdfplumber。
