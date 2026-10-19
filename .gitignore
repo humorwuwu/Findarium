@@ -15,6 +15,7 @@ build/
 build-onefile/
 dist/
 dist-onefile/
+release/
 
 # Node / frontend
 frontend/node_modules/

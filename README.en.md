@@ -97,6 +97,33 @@ temporary directory):
 PyInstaller produces unsigned/ad-hoc builds for local use. Distributing them to other Macs
 requires Developer ID signing and notarization.
 
+## Releasing
+
+Releases are built by GitHub Actions, not on your machine. Pushing a `v*` tag makes
+`.github/workflows/release.yml` build on macOS (Apple Silicon) and attach the assets to a
+GitHub Release:
+
+```bash
+./scripts/set-version.sh 0.2.0    # pyproject / __version__ / frontend / Info.plist
+git commit -am "Release 0.2.0"
+git tag v0.2.0
+git push origin main v0.2.0
+```
+
+The assets are `Findarium-<version>-macos-arm64.zip` (the `.app`), `...-onefile` (the
+single-file executable) and `SHA256SUMS.txt`. To rebuild the assets of an existing tag — after
+a runner or dependency change, say — run Actions → Release → Run workflow with the version
+number; the tag must already be pushed.
+
+ruff and pytest run before packaging, so a failing build never becomes a release. The assets
+are unsigned (ad-hoc), so downloaders clear the quarantine flag once (the release notes carry
+the command); opening with a plain double click needs Developer ID signing and notarization —
+add the certificate and Apple ID secrets to the repository and insert `codesign` /
+`notarytool` steps before the "Ad-hoc sign the app bundle" step.
+
+Everyday checks (ruff, pytest, frontend typecheck and build) live in
+`.github/workflows/ci.yml` and run on pushes to main and on pull requests.
+
 ## Data
 
 By default the index library is created next to the program:

@@ -1,0 +1,152 @@
+name: Release
+
+# Builds the macOS app and attaches it to a GitHub Release.
+#
+#   git tag v0.2.0 && git push origin v0.2.0     # normal release
+#   Actions -> Release -> Run workflow           # rebuild the assets of an
+#                                                # existing tag, e.g. after a
+#                                                # runner or dependency change
+#
+# Assets are unsigned (ad-hoc) builds, so downloaders have to clear the
+# quarantine flag once; the release notes say how.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Existing tag to rebuild, e.g. 0.2.0 (the tag must already be pushed)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS arm64
+    runs-on: macos-15
+    steps:
+      - name: Resolve version from the tag
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            version="${DISPATCH_VERSION#v}"
+          else
+            version="${REF_NAME#v}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "not a release version: '$version' (expected vX.Y.Z)" >&2
+            exit 1
+          fi
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "building $version (prerelease: $prerelease)"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.v.outputs.tag }}
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          # Pinned to the uv that generated uv.lock, so a lock format bump
+          # can't break a release on its own.
+          version: "0.13.0"
+          enable-cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check the runner is Apple Silicon
+        run: |
+          arch="$(uname -m)"
+          if [ "$arch" != "arm64" ]; then
+            echo "expected an arm64 runner, got $arch" >&2
+            exit 1
+          fi
+
+      - name: Stamp the version into the sources
+        run: ./scripts/set-version.sh "${{ steps.v.outputs.version }}"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Lint and test
+        run: |
+          uv run ruff check src tests
+          uv run pytest
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Build Findarium.app (onedir)
+        run: uv run pyinstaller --noconfirm --clean packaging/Findarium.spec
+
+      - name: Build the onefile binary
+        run: |
+          uv run pyinstaller --noconfirm --clean \
+            --distpath dist-onefile \
+            --workpath build-onefile \
+            packaging/Findarium-onefile.spec
+
+      - name: Ad-hoc sign the app bundle
+        run: |
+          codesign --force --sign - --timestamp=none dist/Findarium.app
+          codesign --verify --verbose=2 dist/Findarium.app
+
+      - name: Smoke test both builds
+        run: |
+          ./dist/Findarium.app/Contents/MacOS/Findarium --version
+          ./dist-onefile/Findarium --version
+
+      - name: Package the assets
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="Findarium-${VERSION}-macos-arm64"
+          mkdir -p release
+          # ditto keeps the bundle's 88 symlinks and its code signature intact.
+          # Without --sequesterRsrc: same size, but no __MACOSX AppleDouble
+          # entries, and the unzipped app still verifies.
+          ditto -c -k --keepParent dist/Findarium.app "release/${base}.zip"
+          cp dist-onefile/Findarium "release/${base}-onefile"
+          (cd release && shasum -a 256 ./* > SHA256SUMS.txt)
+          ls -lh release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Findarium-${{ steps.v.outputs.version }}-macos-arm64
+          path: release/
+          retention-days: 14
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VERSION: ${{ steps.v.outputs.version }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          flags=(--verify-tag --title "Findarium $VERSION"
+                 --notes-file .github/release-notes.md --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" release/* "${flags[@]}"

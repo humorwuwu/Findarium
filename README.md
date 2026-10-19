@@ -89,6 +89,30 @@ open dist/Findarium.app
 PyInstaller 产出的是未签名（ad-hoc）构建，适合本机使用；分发给其他 Mac 需要 Developer ID
 签名与公证。
 
+## 发布
+
+远端发布由 GitHub Actions 完成，本地不需要出包。推送 `v*` 标签时，
+`.github/workflows/release.yml` 会在 macOS（Apple Silicon）上构建并把产物挂到 GitHub Release：
+
+```bash
+./scripts/set-version.sh 0.2.0    # 写进 pyproject / __version__ / 前端 / Info.plist
+git commit -am "Release 0.2.0"
+git tag v0.2.0
+git push origin main v0.2.0
+```
+
+产物是 `Findarium-<版本>-macos-arm64.zip`（`.app`）、`...-onefile`（单文件可执行版本）
+和 `SHA256SUMS.txt`。要重跑某个已有标签的构建（例如换了 runner 或依赖），用
+Actions → Release → Run workflow 填版本号，标签必须已经推送过。
+
+打包前会先跑 ruff 和 pytest，测试不过不会出包。当前产物是未签名（ad-hoc）构建，下载者首次
+打开需要去掉隔离标记（release notes 里写了命令）；要做到双击即开，需要 Developer ID 签名
+与公证：在仓库里配置好证书和 Apple ID 相关的 secrets 后，在 workflow 的
+「Ad-hoc sign the app bundle」一步之前插入 `codesign` / `notarytool` 步骤。
+
+日常检查（ruff、pytest、前端 typecheck 与构建）由 `.github/workflows/ci.yml` 在推送 main
+和提 PR 时执行。
+
 ## 数据
 
 默认情况下，索引库建在程序所在目录下：
