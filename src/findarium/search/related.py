@@ -6,6 +6,7 @@ from typing import Any
 from rapidfuzz import fuzz
 
 from ..db import Database
+from ..i18n import DEFAULT_LANG, join_list, localize_stored, translate
 from ..indexing.embeddings import (
     DocumentVectorIndex,
     EmbeddingProvider,
@@ -15,7 +16,7 @@ from ..indexing.embeddings import (
 _PROTECTED_STATUSES = {"encrypted", "encrypted_suspected"}
 
 
-def document_summary(row: dict[str, Any]) -> dict[str, Any]:
+def document_summary(row: dict[str, Any], lang: str = DEFAULT_LANG) -> dict[str, Any]:
     return {
         "id": int(row["id"]),
         "name": row["name"],
@@ -31,7 +32,7 @@ def document_summary(row: dict[str, Any]) -> dict[str, Any]:
         "word_count": row["word_count"],
         "sheet_count": row["sheet_count"],
         "embedding_status": row["embedding_status"],
-        "error": row["error"],
+        "error": localize_stored(row["error"], lang),
         "encryption_kind": row["encryption_kind"],
         "open_count": int(row["open_count"] or 0),
         "last_opened_at": row["last_opened_at"],
@@ -49,7 +50,9 @@ class RelatedService:
         self.doc_index = doc_index
         self.provider = provider
 
-    def related(self, document_id: int, limit: int = 8) -> list[dict[str, Any]]:
+    def related(
+        self, document_id: int, limit: int = 8, lang: str = DEFAULT_LANG
+    ) -> list[dict[str, Any]]:
         row = self.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
         if row is None:
             return []
@@ -68,10 +71,10 @@ class RelatedService:
         protected = row["status"] in _PROTECTED_STATUSES
 
         if not protected:
-            self._add_semantic(document_id, row, add)
-            self._add_keywords(document_id, add)
-        self._add_links(document_id, add)
-        self._add_duplicates(document_id, row, add)
+            self._add_semantic(document_id, row, add, lang)
+            self._add_keywords(document_id, add, lang)
+        self._add_links(document_id, add, lang)
+        self._add_duplicates(document_id, row, add, lang)
 
         ordered = sorted(candidates.values(), key=lambda item: item["score"], reverse=True)
         ordered = ordered[:limit]
@@ -90,17 +93,19 @@ class RelatedService:
             doc = docs.get(item["document_id"])
             if doc is None:
                 continue
-            summary = document_summary(dict(doc))
+            summary = document_summary(dict(doc), lang)
             summary["score"] = round(float(item["score"]), 4)
             summary["reasons"] = item["reasons"]
             results.append(summary)
         return results
 
-    def graph(self, document_id: int, depth: int = 1, limit: int = 30) -> dict[str, Any]:
+    def graph(
+        self, document_id: int, depth: int = 1, limit: int = 30, lang: str = DEFAULT_LANG
+    ) -> dict[str, Any]:
         center = self.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
         if center is None:
             return {"nodes": [], "edges": []}
-        related = self.related(document_id, limit=limit)
+        related = self.related(document_id, limit=limit, lang=lang)
         nodes: list[dict[str, Any]] = [
             {
                 "id": int(center["id"]),
@@ -126,14 +131,17 @@ class RelatedService:
                     "source": int(center["id"]),
                     "target": item["id"],
                     "score": item["score"],
-                    "reason": "；".join(item["reasons"]) or "相关",
+                    "reason": join_list(item["reasons"], lang)
+                    or translate("related.generic", lang),
                 }
             )
         return {"nodes": nodes, "edges": edges}
 
     # --------------------------------------------------------------- signals
 
-    def _add_semantic(self, document_id: int, row: dict[str, Any], add) -> None:
+    def _add_semantic(
+        self, document_id: int, row: dict[str, Any], add, lang: str = DEFAULT_LANG
+    ) -> None:
         vector_row = self.db.fetchone(
             "SELECT vector, dim, model FROM doc_vectors WHERE document_id = ?",
             (document_id,),
@@ -146,9 +154,13 @@ class RelatedService:
             if hit.document_id == document_id:
                 continue
             if hit.score >= 0.55:
-                add(hit.document_id, hit.score, f"内容相似度 {hit.score:.2f}")
+                add(
+                    hit.document_id,
+                    hit.score,
+                    translate("related.similarity", lang, score=f"{hit.score:.2f}"),
+                )
 
-    def _add_keywords(self, document_id: int, add) -> None:
+    def _add_keywords(self, document_id: int, add, lang: str = DEFAULT_LANG) -> None:
         own = self.db.fetchall(
             "SELECT keyword FROM doc_keywords WHERE document_id = ? ORDER BY weight DESC LIMIT 20",
             (document_id,),
@@ -168,10 +180,10 @@ class RelatedService:
         for candidate_id, keywords in grouped.items():
             overlap = len(set(keywords))
             score = min(0.85, 0.35 + 0.08 * overlap)
-            names = "、".join(sorted(set(keywords))[:4])
-            add(candidate_id, score, f"共同关键词：{names}")
+            names = join_list(sorted(set(keywords))[:4], lang)
+            add(candidate_id, score, translate("related.shared_keywords", lang, names=names))
 
-    def _add_links(self, document_id: int, add) -> None:
+    def _add_links(self, document_id: int, add, lang: str = DEFAULT_LANG) -> None:
         rows = self.db.fetchall(
             "SELECT from_document_id, target_document_id, href FROM document_links "
             "WHERE from_document_id = ? OR target_document_id = ?",
@@ -179,11 +191,13 @@ class RelatedService:
         )
         for row in rows:
             if row["from_document_id"] == document_id and row["target_document_id"]:
-                add(int(row["target_document_id"]), 0.9, "文档中链接到本文件")
+                add(int(row["target_document_id"]), 0.9, translate("related.links_to_this", lang))
             if row["target_document_id"] == document_id and row["from_document_id"]:
-                add(int(row["from_document_id"]), 0.9, "本文件被其他文档引用")
+                add(int(row["from_document_id"]), 0.9, translate("related.referenced_by", lang))
 
-    def _add_duplicates(self, document_id: int, row: dict[str, Any], add) -> None:
+    def _add_duplicates(
+        self, document_id: int, row: dict[str, Any], add, lang: str = DEFAULT_LANG
+    ) -> None:
         if row["content_hash"]:
             duplicates = self.db.fetchall(
                 "SELECT id FROM documents WHERE content_hash = ? AND id != ? "
@@ -191,7 +205,7 @@ class RelatedService:
                 (row["content_hash"], document_id),
             )
             for duplicate in duplicates:
-                add(int(duplicate["id"]), 0.98, "内容完全相同（可能是副本）")
+                add(int(duplicate["id"]), 0.98, translate("related.duplicate", lang))
         # File-name family: weak signal, only added as a reason for existing
         # candidates and as a standalone low-score relation.
         stem = Path(row["name"]).stem
@@ -206,4 +220,4 @@ class RelatedService:
                 continue
             score = fuzz.ratio(stem, candidate_stem) / 100.0
             if score >= 0.88 and stem != candidate_stem:
-                add(int(candidate["id"]), 0.45, "文件名高度相似")
+                add(int(candidate["id"]), 0.45, translate("related.similar_name", lang))

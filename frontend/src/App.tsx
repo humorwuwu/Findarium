@@ -16,8 +16,11 @@ import {
 import { SourcesPage } from "./components/SourcesPage";
 import { EncryptedPage } from "./components/EncryptedPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { HelpPage } from "./components/HelpPage";
+import { useI18n } from "./i18n";
 
 export default function App() {
+  const { t, refresh: refreshLanguage } = useI18n();
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [view, setView] = useState<View>("search");
   const [query, setQuery] = useState("");
@@ -57,6 +60,12 @@ export default function App() {
   }, [refreshStatus]);
 
   const libraryReady = Boolean(status?.library.ready);
+
+  // The stored language lives in the library settings, which are only readable
+  // once the library is attached.
+  useEffect(() => {
+    if (libraryReady) refreshLanguage();
+  }, [libraryReady, refreshLanguage]);
 
   const runSearch = useCallback(async () => {
     if (!libraryReady) return;
@@ -115,7 +124,7 @@ export default function App() {
     if (!status) {
       return (
         <div className="flex h-full items-center justify-center gap-2 text-[var(--muted)]">
-          <Loader2 size={16} className="spin" /> 正在启动本地索引服务…
+          <Loader2 size={16} className="spin" /> {t.app.starting}
         </div>
       );
     }
@@ -131,6 +140,9 @@ export default function App() {
     if (view === "settings") {
       return <SettingsPage status={status} onRefresh={refreshStatus} />;
     }
+    if (view === "help") {
+      return <HelpPage />;
+    }
     return (
       <div className="flex h-full min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -143,7 +155,7 @@ export default function App() {
               <input
                 ref={searchInputRef}
                 className="input !pl-9"
-                placeholder="搜索内容、文件名、自然语言，例如：上周修改的合同"
+                placeholder={t.app.placeholder}
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
@@ -168,7 +180,7 @@ export default function App() {
                   {line}
                 </span>
               ))}
-              <span className="ml-auto">{results.total} 个结果 · {results.elapsed_ms}ms</span>
+              <span className="ml-auto">{t.app.results(results.total, results.elapsed_ms)}</span>
             </div>
           ) : null}
 
@@ -181,7 +193,7 @@ export default function App() {
           <div className="min-h-0 flex-1 overflow-auto p-2">
             {items.length === 0 && !searching ? (
               <div className="p-8 text-center text-[12.5px] text-[var(--muted)]">
-                {query ? "没有找到匹配内容。" : "输入关键词开始搜索；空搜索显示最近修改的文档。"}
+                {query ? t.app.noMatches : t.app.emptyHint}
               </div>
             ) : (
               items.map((item) => (
@@ -231,6 +243,7 @@ export default function App() {
     selectDocument,
     selectedId,
     status,
+    t,
     view,
   ]);
 

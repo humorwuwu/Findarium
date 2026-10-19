@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useI18n } from "../i18n";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function PdfViewer({ fileUrl, page }: Props) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(Math.max(1, page || 1));
@@ -63,7 +65,7 @@ export function PdfViewer({ fileUrl, page }: Props) {
   if (error) {
     return (
       <div className="rounded-xl border border-[var(--border)] p-4 text-[12px] text-[var(--danger)]">
-        PDF 预览失败：{error}
+        {t.pdf.previewFailed(error)}
       </div>
     );
   }

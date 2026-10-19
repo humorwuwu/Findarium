@@ -1,20 +1,14 @@
 import {
   Clock,
   FolderSearch,
+  HelpCircle,
   Lock,
   Search,
   Settings,
 } from "lucide-react";
+import { useI18n } from "../i18n";
 
-export type View = "search" | "recent" | "sources" | "encrypted" | "settings";
-
-const ITEMS: { key: View; label: string; icon: typeof Search }[] = [
-  { key: "search", label: "搜索", icon: Search },
-  { key: "recent", label: "最近", icon: Clock },
-  { key: "sources", label: "索引目录", icon: FolderSearch },
-  { key: "encrypted", label: "加密文件", icon: Lock },
-  { key: "settings", label: "设置", icon: Settings },
-];
+export type View = "search" | "recent" | "sources" | "encrypted" | "settings" | "help";
 
 interface Props {
   view: View;
@@ -23,13 +17,23 @@ interface Props {
 }
 
 export function Sidebar({ view, onChange, encryptedCount }: Props) {
+  const { t } = useI18n();
+  const items: { key: View; label: string; icon: typeof Search }[] = [
+    { key: "search", label: t.nav.search, icon: Search },
+    { key: "recent", label: t.nav.recent, icon: Clock },
+    { key: "sources", label: t.nav.sources, icon: FolderSearch },
+    { key: "encrypted", label: t.nav.encrypted, icon: Lock },
+    { key: "settings", label: t.nav.settings, icon: Settings },
+    { key: "help", label: t.nav.help, icon: HelpCircle },
+  ];
+
   return (
     <aside className="flex w-[184px] shrink-0 flex-col gap-1 border-r border-[var(--border)] px-3 py-3">
       <div className="mb-3 flex items-center gap-2 px-2">
         <img src="/icon-64.png" alt="Findarium" className="h-7 w-7 rounded-lg" />
-        <div className="text-[13px] font-semibold">寻册</div>
+        <div className="text-[13px] font-semibold">{t.brand}</div>
       </div>
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const Icon = item.icon;
         return (
           <div
@@ -46,7 +50,7 @@ export function Sidebar({ view, onChange, encryptedCount }: Props) {
         );
       })}
       <div className="mt-auto px-2 text-[11px] leading-5 text-[var(--muted)]">
-        所有数据仅保存在本机
+        {t.nav.localOnly}
       </div>
     </aside>
   );

@@ -4,6 +4,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from .i18n import DEFAULT_LANG, translate
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,8 @@ def open_privacy_settings() -> bool:
         return False
 
 
-def choose_folder_via_osascript(prompt: str = "选择文件夹") -> str | None:
+def choose_folder_via_osascript(prompt: str | None = None, lang: str = DEFAULT_LANG) -> str | None:
+    prompt = prompt or translate("native.choose_folder", lang)
     script = f'POSIX path of (choose folder with prompt "{prompt}")'
     try:
         result = subprocess.run(

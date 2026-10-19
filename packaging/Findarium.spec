@@ -42,6 +42,21 @@ hiddenimports = [
 hiddenimports += collect_submodules("uvicorn")
 hiddenimports += collect_submodules("webview")
 
+# macOS permission prompts are shown verbatim by the system and cannot be
+# localized at runtime here, so each string carries both languages.
+DESKTOP_USAGE = (
+    "寻册需要读取你选择的目录来建立本地内容索引。 "
+    "Findarium needs to read the folders you choose to build the local index."
+)
+NETWORK_USAGE = (
+    "寻册需要读取你选择的网络卷来建立本地内容索引。 "
+    "Findarium needs to read the network volumes you choose to build the local index."
+)
+REMOVABLE_USAGE = (
+    "寻册需要读取你选择的外接磁盘来建立本地内容索引。 "
+    "Findarium needs to read the removable disks you choose to build the local index."
+)
+
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
@@ -81,14 +96,14 @@ app = BUNDLE(
     icon=str(ROOT / "packaging" / "AppIcon.icns"),
     bundle_identifier="com.findarium.desktop",
     info_plist={
-        "CFBundleDisplayName": "寻册",
+        "CFBundleDisplayName": "Findarium 寻册",
         "CFBundleShortVersionString": "0.1.0",
         "LSMinimumSystemVersion": "13.0",
         "NSHighResolutionCapable": True,
-        "NSDesktopFolderUsageDescription": "寻册需要读取你选择的目录来建立本地内容索引。",
-        "NSDocumentsFolderUsageDescription": "寻册需要读取你选择的目录来建立本地内容索引。",
-        "NSDownloadsFolderUsageDescription": "寻册需要读取你选择的目录来建立本地内容索引。",
-        "NSNetworkVolumesUsageDescription": "寻册需要读取你选择的网络卷来建立本地内容索引。",
-        "NSRemovableVolumesUsageDescription": "寻册需要读取你选择的外接磁盘来建立本地内容索引。",
+        "NSDesktopFolderUsageDescription": DESKTOP_USAGE,
+        "NSDocumentsFolderUsageDescription": DESKTOP_USAGE,
+        "NSDownloadsFolderUsageDescription": DESKTOP_USAGE,
+        "NSNetworkVolumesUsageDescription": NETWORK_USAGE,
+        "NSRemovableVolumesUsageDescription": REMOVABLE_USAGE,
     },
 )

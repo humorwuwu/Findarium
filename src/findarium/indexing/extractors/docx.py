@@ -9,6 +9,7 @@ from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
+from ...i18n import index_lang, msg, translate
 from .base import (
     Block,
     CorruptDocumentError,
@@ -52,7 +53,9 @@ def extract(path: Path) -> ExtractedDocument:
     try:
         doc = Document(str(path))
     except Exception as exc:  # python-docx raises several low-level exceptions
-        raise CorruptDocumentError(f"无法打开 DOCX：{exc}") from exc
+        raise CorruptDocumentError(
+            msg("error.open_failed", format="DOCX", error=str(exc))
+        ) from exc
 
     title = (doc.core_properties.title or "").strip() or path.stem
     author = (doc.core_properties.author or "").strip() or None
@@ -97,7 +100,7 @@ def extract(path: Path) -> ExtractedDocument:
                         kind="paragraph",
                         text=text,
                         location_label=" / ".join(heading_stack)
-                        or f"段落 {paragraph_index}",
+                        or translate("location.paragraph", index_lang(), index=paragraph_index),
                         location_json={
                             "paragraph": paragraph_index,
                             "heading_path": list(heading_stack),
@@ -122,7 +125,11 @@ def extract(path: Path) -> ExtractedDocument:
                         location_label=(
                             " / ".join(heading_stack) if heading_stack else ""
                         )
-                        + (f" · 表格 {table_index}" if heading_stack else f"表格 {table_index}"),
+                        + (
+                            " · " + translate("location.table", index_lang(), index=table_index)
+                            if heading_stack
+                            else translate("location.table", index_lang(), index=table_index)
+                        ),
                         location_json={
                             "table": table_index,
                             "heading_path": list(heading_stack),
@@ -136,7 +143,8 @@ def extract(path: Path) -> ExtractedDocument:
     # identical boilerplate across many pages.
     seen_headers: set[str] = set()
     for section in doc.sections:
-        for part, label in ((section.header, "页眉"), (section.footer, "页脚")):
+        for part, part_key in ((section.header, "header"), (section.footer, "footer")):
+            label = translate(f"location.{part_key}", index_lang())
             try:
                 text = "\n".join(p.text.strip() for p in part.paragraphs if p.text.strip())
             except Exception:
@@ -145,10 +153,10 @@ def extract(path: Path) -> ExtractedDocument:
                 seen_headers.add(text)
                 blocks.append(
                     Block(
-                        kind=label,
+                        kind=part_key,
                         text=text,
                         location_label=label,
-                        location_json={"part": label},
+                        location_json={"part": part_key},
                         heading_path=[label],
                     )
                 )
@@ -159,7 +167,7 @@ def extract(path: Path) -> ExtractedDocument:
     if truncated:
         # We keep all blocks but the pipeline applies its own character limit;
         # mark partial so the UI can explain the truncation.
-        warnings = ["文档内容超过单文档字符上限，索引已按上限截断"]
+        warnings = [msg("warn.truncated")]
     else:
         warnings = []
     word_count = count_words(full_text)

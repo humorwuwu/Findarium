@@ -2,27 +2,28 @@
 
 # Findarium / 寻册
 
-A local-first macOS desktop document indexer with Chinese-friendly full-text and semantic search.
+**中文** · [English](README.en.md)
 
-## Features
+本地优先的 macOS 桌面文档索引与检索工具：把若干文件夹里的 Word、Excel、PDF、Markdown 等文档
+提取成全文与语义索引，然后用中文关键词、文件名或自然语言找回它们。所有数据都留在本机。
 
-- Add folders; PDF, DOCX, XLSX, PPTX, Markdown, TXT, CSV and HTML are extracted and indexed.
-- **Single SQLite library** stored in a folder you choose on first run. It contains the extracted
-  text, FTS5 indexes, local semantic vectors, jobs, settings and search history. The app-support
-  directory only holds a small pointer file.
-- Chinese search uses overlapping CJK bigrams (so two-character words and substrings work well),
-  plus a local `BAAI/bge-small-zh-v1.5` semantic index, fuzzy filename matching, recency weighting
-  and local click feedback.
-- Results show highlighted snippets, PDF page / Excel sheet / PPT slide / heading locations,
-  related documents with explanations, and an interactive relation graph.
-- Encrypted or protected files (for example from a company encryption client) are **marked only**:
-  their filenames and paths stay searchable, but no content or vectors are stored. Watcher events
-  and a periodic recheck detect when a file becomes readable and index it then. The app never tries
-  to decrypt, crack or bypass encryption.
-- Startup scan, real-time FSEvents watcher, and a periodic reconciliation sweep keep the index fresh.
-- Native window via pywebview; open files and reveal them in Finder from the results.
+## 功能
 
-## Development
+- 添加文件夹后自动扫描并索引 PDF、DOCX、XLSX、PPTX、Markdown、TXT、CSV、HTML。
+- **单一 SQLite 索引库**，放在你指定的文件夹里，包含提取正文、FTS5 全文索引、本地语义向量、
+  任务队列、设置与搜索历史。应用支持目录里只放一个指向它的位置指针。
+- 中文检索使用重叠二元组分词（两字词和子串都能命中），配合本地 `BAAI/bge-small-zh-v1.5`
+  语义向量、文件名模糊匹配、时间新鲜度与本地点击反馈一起排序。
+- 结果显示高亮片段、位置（PDF 页码 / Excel 工作表与行 / PPT 幻灯片 / Markdown 标题），
+  相关文档及原因，以及可交互的关系图。
+- 加密或受保护的文件（例如公司加密软件加密的文档）**只做标注**：文件名和路径仍可搜索，
+  但不保存正文和向量。文件监听与定时复查会在文件可读后自动索引。应用不会尝试解密、破解
+  或绕过加密。
+- 启动即扫描，运行中由 FSEvents 实时监听，并有定时校对兜底。
+- 界面、帮助与文档均提供中英文两套文案，可在设置页切换（默认跟随系统）。
+- 原生窗口（pywebview），结果可直接打开文件或在 Finder 中定位。
+
+## 开发
 
 ```bash
 uv sync
@@ -31,19 +32,21 @@ cd ..
 uv run findarium
 ```
 
-For UI development with hot reload:
+前端热更新开发：
 
 ```bash
 ./scripts/dev.sh
 ```
 
-Headless backend (useful for API work):
+只跑后端（调试 API 时很方便）：
 
 ```bash
 uv run findarium --headless --library /tmp/findarium-dev --no-embedding
 ```
 
-Run checks:
+命令行语言可用 `--lang auto|zh-CN|en` 指定，默认跟随系统。
+
+运行检查：
 
 ```bash
 uv run ruff check src tests
@@ -51,65 +54,63 @@ uv run pytest
 cd frontend && npm run typecheck && npm run build
 ```
 
-## Packaging
+## 打包
 
-Double-clickable app bundle (onedir, faster startup — recommended):
+双击可用的 `.app`（onedir，启动更快，推荐）：
 
 ```bash
 ./scripts/build.sh
 open dist/Findarium.app
 ```
 
-Single-file executable (onefile, one Mach-O file, slower first start because it extracts to a
-temporary directory):
+单文件可执行版本（onefile，只有一个 Mach-O 文件，首次启动较慢，因为要先解压到临时目录）：
 
 ```bash
 ./scripts/build-onefile.sh
-./dist-onefile/Findarium                      # opens the desktop window
+./dist-onefile/Findarium                      # 打开桌面窗口
 ./dist-onefile/Findarium --headless --port 8811 --library ~/MaterialIndex
 ```
 
-PyInstaller produces unsigned/ad-hoc builds for local use. Distributing them to other Macs
-requires Developer ID signing and notarization.
+PyInstaller 产出的是未签名（ad-hoc）构建，适合本机使用；分发给其他 Mac 需要 Developer ID
+签名与公证。
 
-## Data
+## 数据
 
-By default the index library is created next to the program:
+默认情况下，索引库建在程序所在目录下：
 
-- `dist/FindariumData/` next to `dist/Findarium.app`
-- `dist-onefile/FindariumData/` next to the single-file executable
-- `./FindariumData/` when running from a source checkout
+- `dist/FindariumData/`（`dist/Findarium.app` 旁边）
+- `dist-onefile/FindariumData/`（单文件可执行文件旁边）
+- `./FindariumData/`（从源码运行时）
 
-It contains the only database, `index.sqlite3`, plus `backups/`, `models/` and `logs/`. If the
-program directory is not writable (for example an app in a system-managed location), the app falls
-back to `~/Library/Application Support/Findarium/data` and says so in the UI. A small pointer file
-in `~/Library/Application Support/Findarium/bootstrap.json` remembers a user-chosen location if you
-move the library from Settings.
+里面只有一个数据库 `index.sqlite3`，以及 `backups/`、`models/`、`logs/`。如果程序目录不可写
+（例如放在系统管理的位置），应用会回退到 `~/Library/Application Support/Findarium/data`，
+并在界面上说明。`~/Library/Application Support/Findarium/bootstrap.json` 里只记录一个指针，
+用于记住你在设置页手动迁移后的位置。
 
-Do not place the library in iCloud/Dropbox-style sync folders (WAL files can be corrupted by sync)
-or in a folder that a company encryption client encrypts.
+不要把索引库放在 iCloud/Dropbox 之类的自动同步目录（WAL 文件可能被同步损坏），也不要放在
+会被公司加密软件加密的目录。
 
-## Adaptive indexing
+## 自适应索引
 
-Indexing uses a small worker pool that scales with the machine:
+索引使用一个会随机器状态伸缩的小型 worker 池：
 
-- More extraction workers when the load average and this process's CPU usage are low.
-- Back down to one worker when the machine is busy, so other apps stay responsive.
-- Semantic embedding runs on its own worker and shrinks its batch size under load, so vector
-  backfill never blocks text indexing.
+- 系统空闲时提高提取并发（最多 4 个 worker）。
+- 负载或本进程 CPU 占用升高时降回 1 个 worker，保证其他程序不受影响。
+- 语义向量由独立 worker 在后台补全，负载高时自动缩小批大小，不会阻塞关键词索引。
 
-The current worker count, load ratio and embedding batch are visible in the status bar and Settings.
+当前 worker 数量、系统负载与向量批大小显示在底部状态栏和设置页。
 
-## Known limitations
+## 已知限制
 
-- No OCR for scanned PDFs; such files are marked as partial and searchable by filename only.
-- No legacy `.doc` / `.xls` support.
-- Word/Excel/PPT previews show extracted text and locations rather than pixel-perfect layout;
-  use the “Open” action for full fidelity.
-- PyMuPDF is AGPL-licensed. This project is intended as a personal local tool. If you distribute
-  it, review the PyMuPDF license or replace the PDF extractor (for example with pypdf/pdfplumber).
+- 不做 OCR：扫描版 PDF 标记为“部分索引”，只能按文件名搜到。
+- 不支持旧版 `.doc` / `.xls`。
+- Word/Excel/PPT 的应用内预览显示提取出的文字与位置，不是完整排版；需要完整效果请用“打开”。
+- 提取时写入索引的少量文字（例如表格的“列标题:”前缀）跟随当时的界面语言，切换语言后
+  需要重建索引才会更新；其余文案（标签、原因、位置、错误）都按当前语言即时生成。
+- PyMuPDF 采用 AGPL 许可。本项目定位为个人本地工具，如需分发请先评估其许可，或把 PDF
+  提取器替换为 pypdf/pdfplumber。
 
-## License
+## 许可
 
-No license is granted yet — this is a personal project. Note that the PDF extractor depends on
-PyMuPDF (AGPL-3.0), so any distribution needs its license reviewed first.
+目前未授予任何许可，这是一个个人项目。注意 PDF 提取依赖 PyMuPDF（AGPL-3.0），任何分发
+前都需要先确认许可问题。

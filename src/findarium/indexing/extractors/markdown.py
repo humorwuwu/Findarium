@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ...i18n import index_lang, msg, translate
 from .base import (
     Block,
     ExtractedDocument,
@@ -86,7 +87,9 @@ def extract(path: Path) -> ExtractedDocument:
                     kind="markdown",
                     text=cleaned,
                     location_label=(
-                        " / ".join(heading_path) if heading_path else f"第 {buffer_start} 行"
+                        " / ".join(heading_path)
+                        if heading_path
+                        else translate("location.line", index_lang(), line=buffer_start)
                     ),
                     location_json=location,
                     heading_path=heading_path,
@@ -145,8 +148,8 @@ def extract(path: Path) -> ExtractedDocument:
         blocks.append(
             Block(
                 kind="warning",
-                text=f"文件超过字符上限，后续内容未索引（原始行数：{len(lines)}）",
-                location_label="截断提示",
+                text=translate("warn.markdown_truncated", index_lang(), lines=len(lines)),
+                location_label=translate("location.truncated", index_lang()),
                 location_json={"truncated": True},
             )
         )
@@ -158,7 +161,7 @@ def extract(path: Path) -> ExtractedDocument:
         author=None,
         metadata={"links": [{"href": link.href, "target_path": link.target_path} for link in links_for_doc]},
         blocks=blocks,
-        warnings=["文档内容超过字符上限，索引已截断"] if truncated else [],
+        warnings=[msg("warn.truncated")] if truncated else [],
         partial=truncated,
         word_count=count_words(full_text),
     )

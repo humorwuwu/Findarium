@@ -1,6 +1,7 @@
 import { ExternalLink, FolderSearch, Lock } from "lucide-react";
 import type { SearchItem } from "../types";
-import { extensionColor, extensionLabel, formatBytes, formatTime } from "../format";
+import { extensionColor, extensionLabel } from "../format";
+import { useI18n } from "../i18n";
 import { Highlight } from "./Highlight";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function ResultCard({ item, selected, onSelect, onOpen, onReveal }: Props) {
+  const { t, bytes, time } = useI18n();
   const doc = item.document;
   const encrypted = doc.status === "encrypted" || doc.status === "encrypted_suspected";
   return (
@@ -35,7 +37,7 @@ export function ResultCard({ item, selected, onSelect, onOpen, onReveal }: Props
             {encrypted && (
               <span className="chip warn">
                 <Lock size={11} />
-                已加密
+                {t.result.encrypted}
               </span>
             )}
           </div>
@@ -60,9 +62,7 @@ export function ResultCard({ item, selected, onSelect, onOpen, onReveal }: Props
             </div>
           ) : (
             <div className="mt-2 text-[12px] text-[var(--muted)]">
-              {encrypted
-                ? "该文件已加密，正文未索引；文件名/路径仍可搜索。"
-                : "没有可显示的正文片段。"}
+              {encrypted ? t.result.encryptedNote : t.result.noSnippet}
             </div>
           )}
 
@@ -73,14 +73,14 @@ export function ResultCard({ item, selected, onSelect, onOpen, onReveal }: Props
               </span>
             ))}
             <span className="ml-auto text-[11px] text-[var(--muted)]">
-              {formatBytes(doc.size_bytes)} · {formatTime(doc.mtime_ns)}
+              {bytes(doc.size_bytes)} · {time(doc.mtime_ns)}
             </span>
           </div>
         </div>
         <div className="flex shrink-0 flex-col gap-1">
           <button
             className="btn ghost !p-1.5"
-            title="打开文件"
+            title={t.actions.open}
             onClick={(event) => {
               event.stopPropagation();
               onOpen();
@@ -90,7 +90,7 @@ export function ResultCard({ item, selected, onSelect, onOpen, onReveal }: Props
           </button>
           <button
             className="btn ghost !p-1.5"
-            title="在 Finder 中显示"
+            title={t.actions.reveal}
             onClick={(event) => {
               event.stopPropagation();
               onReveal();

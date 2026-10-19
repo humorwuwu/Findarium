@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import type { DocumentDetail, GraphData } from "../types";
-import { extensionColor, extensionLabel, formatBytes, formatTime } from "../format";
+import { extensionColor, extensionLabel } from "../format";
+import { useI18n } from "../i18n";
 import { PdfViewer } from "./PdfViewer";
 import { RelationGraph } from "./RelationGraph";
 
@@ -32,12 +33,13 @@ export function DetailPanel({
   onSelectDocument,
   onRefresh,
 }: Props) {
+  const { t, bytes, time } = useI18n();
   const [tab, setTab] = useState<Tab>("content");
 
   if (!detail) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-[12.5px] text-[var(--muted)]">
-        {loading ? "正在加载…" : "选择左侧结果查看详情"}
+        {loading ? t.detail.loading : t.detail.selectPrompt}
       </div>
     );
   }
@@ -62,11 +64,11 @@ export function DetailPanel({
           <div className="truncate text-[14px] font-semibold">{doc.title || doc.name}</div>
           <div className="mono truncate text-[11px] text-[var(--muted)]">{doc.path}</div>
           <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-[var(--muted)]">
-            <span>{formatBytes(doc.size_bytes)}</span>
-            <span>修改 {formatTime(doc.mtime_ns)}</span>
-            {doc.page_count ? <span>{doc.page_count} 页</span> : null}
-            {doc.sheet_count ? <span>{doc.sheet_count} 个工作表</span> : null}
-            {doc.word_count ? <span>{doc.word_count} 词</span> : null}
+            <span>{bytes(doc.size_bytes)}</span>
+            <span>{t.detail.modified(time(doc.mtime_ns))}</span>
+            {doc.page_count ? <span>{t.detail.pageCount(doc.page_count)}</span> : null}
+            {doc.sheet_count ? <span>{t.detail.sheetCount(doc.sheet_count)}</span> : null}
+            {doc.word_count ? <span>{t.detail.wordCount(doc.word_count)}</span> : null}
           </div>
         </div>
         <button className="btn ghost !p-1.5" onClick={onClose}>
@@ -77,11 +79,11 @@ export function DetailPanel({
       <div className="flex flex-wrap gap-2 border-b border-[var(--border)] px-4 py-2">
         <button className="btn" onClick={() => api.openDocument(doc.id)}>
           <ExternalLink size={14} />
-          打开
+          {t.actions.open}
         </button>
         <button className="btn" onClick={() => api.revealDocument(doc.id)}>
           <FolderSearch size={14} />
-          Finder
+          {t.actions.revealShort}
         </button>
         <button
           className="btn"
@@ -91,7 +93,7 @@ export function DetailPanel({
           }}
         >
           <RefreshCw size={14} />
-          重建索引
+          {t.actions.reindex}
         </button>
         {encrypted && (
           <button
@@ -102,7 +104,7 @@ export function DetailPanel({
             }}
           >
             <ScanSearch size={14} />
-            重新检测
+            {t.actions.reprobe}
           </button>
         )}
       </div>
@@ -111,9 +113,9 @@ export function DetailPanel({
         <div className="m-4 flex items-start gap-2 rounded-xl bg-[rgba(255,149,0,0.12)] p-3 text-[12px]">
           <Lock size={15} className="mt-0.5 shrink-0 text-[#ff9500]" />
           <div>
-            <div className="font-medium">该文件已加密，正文未索引</div>
+            <div className="font-medium">{t.detail.encryptedTitle}</div>
             <div className="mt-1 text-[var(--muted)]">
-              {doc.error || "检测到受保护内容"}。文件解密后会自动重新提取；应用不会尝试解密或绕过加密。
+              {t.detail.encryptedExplain(doc.error || t.detail.encryptedFallback)}
             </div>
           </div>
         </div>
@@ -122,9 +124,9 @@ export function DetailPanel({
       <div className="flex gap-1 px-4 pt-2">
         {(
           [
-            ["content", "内容"],
-            ["related", `相关文档 (${doc.related?.length ?? 0})`],
-            ["graph", "关系图"],
+            ["content", t.detail.tabContent],
+            ["related", t.detail.tabRelated(doc.related?.length ?? 0)],
+            ["graph", t.detail.tabGraph],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
@@ -154,7 +156,7 @@ export function DetailPanel({
 
             {doc.keywords?.length > 0 && (
               <div>
-                <div className="section-title mb-2">关键词</div>
+                <div className="section-title mb-2">{t.detail.keywords}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {doc.keywords.map((keyword) => (
                     <span key={keyword.keyword} className="chip neutral">
@@ -166,7 +168,7 @@ export function DetailPanel({
             )}
 
             <div>
-              <div className="section-title mb-2">提取内容</div>
+              <div className="section-title mb-2">{t.detail.extracted}</div>
               {doc.chunks?.length ? (
                 <div className="space-y-2">
                   {doc.chunks.slice(0, 120).map((chunk) => (
@@ -185,21 +187,21 @@ export function DetailPanel({
                 </div>
               ) : (
                 <div className="text-[12px] text-[var(--muted)]">
-                  {encrypted ? "加密文件没有正文内容。" : "没有提取到正文内容。"}
+                  {encrypted ? t.detail.encryptedNoBody : t.detail.noBody}
                 </div>
               )}
             </div>
 
             {doc.metadata && Object.keys(doc.metadata).length > 0 && (
               <div>
-                <div className="section-title mb-2">元数据</div>
+                <div className="section-title mb-2">{t.detail.metadata}</div>
                 <div className="space-y-1 text-[11.5px] text-[var(--muted)]">
                   {Object.entries(doc.metadata)
                     .filter(([, value]) => value)
                     .slice(0, 12)
                     .map(([key, value]) => (
                       <div key={key} className="truncate">
-                        <span className="font-medium">{key}</span>：{String(value)}
+                        {t.detail.metadataEntry(key, String(value))}
                       </div>
                     ))}
                 </div>
@@ -232,12 +234,12 @@ export function DetailPanel({
                     </span>
                   </div>
                   <div className="mt-1.5 text-[11.5px] text-[var(--muted)]">
-                    {item.reasons.join("；")}
+                    {item.reasons.join(t.detail.listSeparator)}
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-[12px] text-[var(--muted)]">暂无相关文档。</div>
+              <div className="text-[12px] text-[var(--muted)]">{t.detail.noRelated}</div>
             )}
           </div>
         )}
@@ -246,7 +248,7 @@ export function DetailPanel({
           (graph ? (
             <RelationGraph data={graph} onSelect={onSelectDocument} />
           ) : (
-            <div className="text-[12px] text-[var(--muted)]">正在加载关系图…</div>
+            <div className="text-[12px] text-[var(--muted)]">{t.detail.loadingGraph}</div>
           ))}
       </div>
     </div>

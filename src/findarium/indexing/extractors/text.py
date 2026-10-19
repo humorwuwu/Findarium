@@ -9,6 +9,7 @@ from ...config import (
     MAX_CSV_ROWS_PER_CHUNK,
     MAX_TEXT_CHARS,
 )
+from ...i18n import index_lang, msg, translate
 from .base import (
     Block,
     DocumentTooLargeError,
@@ -37,7 +38,7 @@ def extract_txt(path: Path) -> ExtractedDocument:
                 Block(
                     kind="text",
                     text=block_text,
-                    location_label=f"第 {start}-{end} 行",
+                    location_label=translate("location.lines", index_lang(), start=start, end=end),
                     location_json={"line_start": start, "line_end": end},
                 )
             )
@@ -59,7 +60,7 @@ def extract_txt(path: Path) -> ExtractedDocument:
     return ExtractedDocument(
         title=path.stem,
         blocks=blocks,
-        warnings=["文档内容超过字符上限，索引已截断"] if truncated else [],
+        warnings=[msg("warn.truncated")] if truncated else [],
         partial=truncated,
         word_count=count_words(full_text),
     )
@@ -68,7 +69,7 @@ def extract_txt(path: Path) -> ExtractedDocument:
 def extract_csv(path: Path) -> ExtractedDocument:
     size = path.stat().st_size
     if size > 50 * 1024 * 1024:
-        raise DocumentTooLargeError("CSV 超过 50 MB 限制")
+        raise DocumentTooLargeError(msg("error.csv_too_large", limit=50))
     text = read_text(path)
     text, truncated = truncate_text(text)
     reader = csv.reader(io.StringIO(text))
@@ -86,14 +87,14 @@ def extract_csv(path: Path) -> ExtractedDocument:
         end = group[-1][0]
         lines = []
         if header:
-            lines.append("列: " + " | ".join(header))
+            lines.append(f"{translate("text.columns", index_lang())}: " + " | ".join(header))
         lines.extend(f"{number}: {line}" for number, line in group)
         body = "\n".join(lines)
         blocks.append(
             Block(
                 kind="csv",
                 text=body,
-                location_label=f"行 {start}-{end}",
+                location_label=translate("location.rows", index_lang(), start=start, end=end),
                 location_json={"row_start": start, "row_end": end},
             )
         )
@@ -120,7 +121,7 @@ def extract_csv(path: Path) -> ExtractedDocument:
     warnings = []
     if truncated or partial:
         warnings.append(
-            f"CSV 超过索引上限（最多 {MAX_CSV_ROWS} 行或 {MAX_TEXT_CHARS} 字符），已截断"
+            msg("warn.csv_truncated", rows=MAX_CSV_ROWS, chars=MAX_TEXT_CHARS)
         )
     return ExtractedDocument(
         title=path.stem,

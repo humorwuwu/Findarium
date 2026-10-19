@@ -10,15 +10,18 @@ export function formatBytes(bytes: number): string {
   return `${value >= 10 || index === 0 ? Math.round(value) : value.toFixed(1)} ${units[index]}`;
 }
 
-export function formatTime(ns: number | null | undefined): string {
+export function formatTime(
+  ns: number | null | undefined,
+  locale = "zh-CN",
+): string {
   if (!ns) return "—";
   const date = new Date(ns / 1_000_000);
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
   if (sameDay) {
-    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString(locale, {
     year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
     month: "2-digit",
     day: "2-digit",

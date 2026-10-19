@@ -5,6 +5,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..i18n import msg
 from .extractors import normalized_extension
 
 OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
@@ -47,23 +48,23 @@ def _office_probe(path: Path, head: bytes) -> ProtectionResult:
                 names = set(archive.namelist())
                 if "EncryptionInfo" in names or "EncryptedPackage" in names:
                     return ProtectionResult(
-                        "encrypted", "office_encrypted_zip", "检测到 Office 加密包"
+                        "encrypted", "office_encrypted_zip", msg("protect.office_encrypted_zip")
                     )
                 if "[Content_Types].xml" not in names:
                     return ProtectionResult(
                         "suspected",
                         "office_unexpected_zip",
-                        "Office 文件缺少 OOXML 结构，疑似受保护或已损坏",
+                        msg("protect.office_unexpected_zip"),
                     )
                 # ZIP entries themselves can be encrypted by some DLP tools.
                 for info in archive.infolist():
                     if info.flag_bits & 0x1:
                         return ProtectionResult(
-                            "encrypted", "zip_encrypted", "ZIP 内容已加密"
+                            "encrypted", "zip_encrypted", msg("protect.zip_encrypted")
                         )
         except (zipfile.BadZipFile, OSError):
             return ProtectionResult(
-                "suspected", "office_bad_zip", "无法读取 Office 文件内容，疑似受保护"
+                "suspected", "office_bad_zip", msg("protect.office_bad_zip")
             )
         return ProtectionResult("ok")
 
@@ -77,19 +78,19 @@ def _office_probe(path: Path, head: bytes) -> ProtectionResult:
                 }
                 if "encryptioninfo" in names or "encryptedpackage" in names:
                     return ProtectionResult(
-                        "encrypted", "office_password", "检测到 Office 密码加密容器"
+                        "encrypted", "office_password", msg("protect.office_password")
                     )
         except Exception:
             pass
         return ProtectionResult(
             "suspected",
             "office_ole_container",
-            "Office 扩展名对应 OLE 容器，可能是加密文档或旧格式",
+            msg("protect.office_ole_container"),
         )
 
     if _entropy(head) >= 7.2:
         return ProtectionResult(
-            "suspected", "high_entropy", "文件头无法识别且熵较高，疑似受保护或加密"
+            "suspected", "high_entropy", msg("protect.high_entropy")
         )
     return ProtectionResult("ok")
 
@@ -98,7 +99,7 @@ def _pdf_probe(path: Path, head: bytes) -> ProtectionResult:
     if b"%PDF-" not in head[:1024]:
         if _entropy(head) >= 7.2:
             return ProtectionResult(
-                "suspected", "pdf_unrecognized", "PDF 文件头无法识别，疑似受保护"
+                "suspected", "pdf_unrecognized", msg("protect.pdf_unrecognized")
             )
         return ProtectionResult("ok")
     try:
@@ -108,16 +109,16 @@ def _pdf_probe(path: Path, head: bytes) -> ProtectionResult:
         try:
             if document.needs_pass:
                 return ProtectionResult(
-                    "encrypted", "pdf_password", "PDF 需要密码或权限密码"
+                    "encrypted", "pdf_password", msg("protect.pdf_password")
                 )
         finally:
             document.close()
     except Exception as exc:
         text = str(exc).lower()
         if any(token in text for token in ("password", "encrypted", "decrypt", "密码", "加密")):
-            return ProtectionResult("encrypted", "pdf_password", "PDF 无法解密")
+            return ProtectionResult("encrypted", "pdf_password", msg("protect.pdf_no_decrypt"))
         return ProtectionResult(
-            "suspected", "pdf_unreadable", f"PDF 无法打开：{exc}"
+            "suspected", "pdf_unreadable", msg("protect.pdf_unreadable", error=str(exc))
         )
     return ProtectionResult("ok")
 

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
+import { FolderOpen, Languages, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
 import { api, pickFolder } from "../api";
 import type { AppStatus } from "../types";
+import { useI18n } from "../i18n";
+import type { LanguagePreference } from "../i18n/types";
 
 interface Props {
   status: AppStatus;
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export function SettingsPage({ status, onRefresh }: Props) {
+  const { t, preference, setPreference } = useI18n();
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ jobs: unknown[]; documents: unknown[] } | null>(null);
@@ -29,63 +32,93 @@ export function SettingsPage({ status, onRefresh }: Props) {
   async function save(key: string, value: string) {
     const next = await api.updateSettings({ [key]: value });
     setSettings(next);
-    setMessage("已保存");
+    setMessage(t.settings.saved);
     setTimeout(() => setMessage(null), 1500);
   }
 
   async function relocate() {
     const path = await pickFolder();
     if (!path) return;
-    if (!window.confirm(`将索引库迁移到：\n${path}\n\n迁移期间会暂停索引，确定继续？`)) return;
+    if (!window.confirm(t.settings.relocateConfirm(path))) return;
     await api.relocateLibrary(path);
     onRefresh();
   }
 
   const libraryPath = String(settings.library_path ?? status.library.path ?? "");
+  const modelState =
+    status.embedding_state === "ready"
+      ? t.settings.modelReady
+      : status.embedding_state === "loading"
+        ? t.settings.modelLoading
+        : status.embedding_state === "failed"
+          ? t.settings.modelFailed(status.embedding_error ?? t.settings.modelUnknownError)
+          : t.settings.modelDisabled;
 
   return (
     <div className="mx-auto w-full max-w-[900px] space-y-5 p-6">
-      <div className="text-[18px] font-semibold">设置</div>
+      <div className="text-[18px] font-semibold">{t.settings.title}</div>
 
       <div className="solid-panel p-4">
-        <div className="section-title mb-3">索引库</div>
+        <div className="section-title mb-3">{t.settings.language}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Languages size={14} className="text-[var(--muted)]" />
+          <select
+            className="rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-[12px]"
+            value={preference}
+            onChange={(event) =>
+              setPreference(event.target.value as LanguagePreference)
+            }
+          >
+            <option value="auto">{t.settings.languageAuto}</option>
+            <option value="zh-CN">{t.settings.languageZh}</option>
+            <option value="en">{t.settings.languageEn}</option>
+          </select>
+        </div>
+        <div className="mt-2 text-[11.5px] leading-5 text-[var(--muted)]">
+          {t.settings.languageNote}
+        </div>
+      </div>
+
+      <div className="solid-panel p-4">
+        <div className="section-title mb-3">{t.settings.library}</div>
         <div className="mono mb-2 break-all text-[11.5px] text-[var(--muted)]">{libraryPath}</div>
         {status.library.fallback && (
           <div className="mb-2 rounded-lg bg-[rgba(255,149,0,0.12)] p-2 text-[11.5px] text-[#ff9500]">
-            程序目录不可写，数据已回退到应用支持目录；可以在这里迁移到其他位置。
+            {t.settings.libraryFallback}
           </div>
         )}
         <div className="mb-3 text-[11.5px] text-[var(--muted)]">
-          默认位置：程序所在目录下的 <span className="mono">FindariumData</span>
-          {status.library.program_dir ? `（当前程序目录：${status.library.program_dir}）` : ""}
+          {t.settings.defaultLocationPrefix}
+          <span className="mono">FindariumData</span>
+          {status.library.program_dir ? t.settings.programDir(status.library.program_dir) : ""}
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn" onClick={relocate}>
             <FolderOpen size={14} />
-            迁移索引库位置
+            {t.settings.relocate}
           </button>
           <button
             className="btn"
             onClick={async () => {
               const result = await api.rebuild();
-              setMessage(`已加入重建队列：${result.queued} 个文档`);
+              setMessage(t.settings.rebuildQueued(result.queued));
             }}
           >
             <RotateCcw size={14} />
-            重建全部索引
+            {t.settings.rebuild}
           </button>
           <button className="btn" onClick={() => api.openPrivacySettings()}>
             <ShieldCheck size={14} />
-            完全磁盘访问权限
+            {t.settings.privacy}
           </button>
         </div>
       </div>
 
       <div className="solid-panel p-4">
-        <div className="section-title mb-3">扫描与加密复查</div>
+        <div className="section-title mb-3">{t.settings.scanSection}</div>
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
-            <div className="mb-1 text-[12px] text-[var(--muted)]">定时校对间隔（秒）</div>
+            <div className="mb-1 text-[12px] text-[var(--muted)]">{t.settings.scanInterval}</div>
             <input
               className="input"
               defaultValue={String(settings.scan_interval_seconds ?? 600)}
@@ -93,7 +126,9 @@ export function SettingsPage({ status, onRefresh }: Props) {
             />
           </label>
           <label className="block">
-            <div className="mb-1 text-[12px] text-[var(--muted)]">加密文件复查间隔（秒）</div>
+            <div className="mb-1 text-[12px] text-[var(--muted)]">
+              {t.settings.encryptedInterval}
+            </div>
             <input
               className="input"
               defaultValue={String(settings.encrypted_recheck_seconds ?? 600)}
@@ -104,48 +139,45 @@ export function SettingsPage({ status, onRefresh }: Props) {
       </div>
 
       <div className="solid-panel p-4">
-        <div className="section-title mb-3">索引性能</div>
+        <div className="section-title mb-3">{t.settings.performance}</div>
         <div className="mb-2 text-[12.5px] text-[var(--muted)]">
-          并发 worker：{status.workers?.active ?? 0} / {status.workers?.desired ?? 0}
-          （上限 {status.workers?.max ?? 1}） · 系统负载{" "}
-          {(status.load_ratio ?? 0).toFixed(2)} · 进程 CPU{" "}
-          {((status.process_cpu ?? 0) * 100).toFixed(0)}% · 向量批大小{" "}
-          {status.embedding_batch ?? "—"}
+          {t.settings.performanceSummary({
+            active: status.workers?.active ?? 0,
+            desired: status.workers?.desired ?? 0,
+            max: status.workers?.max ?? 1,
+            load: (status.load_ratio ?? 0).toFixed(2),
+            cpu: ((status.process_cpu ?? 0) * 100).toFixed(0),
+            batch: String(status.embedding_batch ?? "—"),
+          })}
         </div>
         <div className="text-[11.5px] leading-5 text-[var(--muted)]">
-          空闲时自动提高提取并发；CPU 占用或系统负载升高时降回 1 个 worker，并缩小向量批大小，
-          避免影响你正在使用的其他程序。
+          {t.settings.performanceNote}
         </div>
       </div>
 
       <div className="solid-panel p-4">
-        <div className="section-title mb-3">语义模型</div>
+        <div className="section-title mb-3">{t.settings.model}</div>
         <div className="mb-3 text-[12.5px] text-[var(--muted)]">
-          模型：{status.embedding_model ?? "BAAI/bge-small-zh-v1.5"} · 状态：
-          {status.embedding_state === "ready"
-            ? "已就绪"
-            : status.embedding_state === "loading"
-              ? "加载中"
-              : status.embedding_state === "failed"
-                ? `失败（${status.embedding_error ?? "未知错误"}）`
-                : "未启用"}
-          {status.embedding_ready != null ? ` · 已向量化 ${status.embedding_ready} 个文档` : ""}
+          {t.settings.modelLabel}
+          {status.embedding_model ?? "BAAI/bge-small-zh-v1.5"} · {t.settings.statusLabel}
+          {modelState}
+          {status.embedding_ready != null ? t.settings.modelIndexed(status.embedding_ready) : ""}
         </div>
         <button
           className="btn"
           onClick={async () => {
             const result = await api.retryModel();
-            setMessage(`模型状态：${result.state}，重新排队 ${result.queued} 个文档`);
+            setMessage(t.settings.modelRetryResult(result.state, result.queued));
           }}
         >
           <RefreshCw size={14} />
-          重试模型加载 / 重新排队
+          {t.settings.modelRetry}
         </button>
       </div>
 
       {errors && (errors.jobs.length > 0 || errors.documents.length > 0) && (
         <div className="solid-panel p-4">
-          <div className="section-title mb-3">索引问题</div>
+          <div className="section-title mb-3">{t.settings.problems}</div>
           <div className="space-y-1 text-[11.5px] text-[var(--muted)]">
             {errors.jobs.slice(0, 10).map((job, index) => (
               <div key={index} className="mono truncate">

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FolderOpen, HardDrive, Loader2, ShieldAlert } from "lucide-react";
 import { api, pickFolder, pickFolders } from "../api";
 import type { AppStatus } from "../types";
+import { useI18n } from "../i18n";
 
 interface Props {
   status: AppStatus;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function Setup({ status, onRefresh }: Props) {
+  const { t } = useI18n();
   const [libraryPath, setLibraryPath] = useState(status.library.path ?? "");
   const [embedding, setEmbedding] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -59,31 +61,25 @@ export function Setup({ status, onRefresh }: Props) {
       <div className="panel w-full max-w-[640px] p-7">
         <div className="mb-1 flex items-center gap-2 text-[20px] font-semibold">
           <HardDrive size={20} />
-          建立本地索引库
+          {t.setup.title}
         </div>
-        <p className="mb-5 text-[13px] leading-6 text-[var(--muted)]">
-          所有正文、向量和搜索历史都保存在你选择的文件夹里，不会上传到任何服务器。
-          加密文件只记录文件名和路径，不会提取正文；解密后会自动重新索引。
-        </p>
+        <p className="mb-5 text-[13px] leading-6 text-[var(--muted)]">{t.setup.intro}</p>
 
-        <div className="section-title mb-2">1. 索引库文件夹</div>
+        <div className="section-title mb-2">{t.setup.step1}</div>
         <div className="mb-2 flex gap-2">
           <input
             className="input"
-            placeholder="例如 ~/MaterialIndex"
+            placeholder={t.setup.pathPlaceholder}
             value={libraryPath}
             onChange={(event) => setLibraryPath(event.target.value)}
             disabled={libraryReady}
           />
           <button className="btn" onClick={chooseLibrary} disabled={libraryReady}>
             <FolderOpen size={15} />
-            选择
+            {t.actions.choose}
           </button>
         </div>
-        <p className="mb-4 text-[11.5px] leading-5 text-[var(--muted)]">
-          不要放在 iCloud/Dropbox 等自动同步目录，也不要放在会被公司加密软件加密的目录。
-          应用支持目录只保存一个指向这里的位置指针。
-        </p>
+        <p className="mb-4 text-[11.5px] leading-5 text-[var(--muted)]">{t.setup.pathWarning}</p>
 
         {!libraryReady && (
           <>
@@ -93,29 +89,32 @@ export function Setup({ status, onRefresh }: Props) {
                 checked={embedding}
                 onChange={(event) => setEmbedding(event.target.checked)}
               />
-              启用本地中文语义检索（首次会下载约 90 MB 模型，可稍后在设置中重试）
+              {t.setup.embedding}
             </label>
-            <button className="btn primary mb-4" onClick={initialize} disabled={busy || !libraryPath.trim()}>
+            <button
+              className="btn primary mb-4"
+              onClick={initialize}
+              disabled={busy || !libraryPath.trim()}
+            >
               {busy ? <Loader2 size={15} className="spin" /> : <HardDrive size={15} />}
-              初始化索引库
+              {t.setup.initialize}
             </button>
           </>
         )}
 
         {libraryReady && (
           <>
-            <div className="section-title mb-2">2. 添加要索引的目录</div>
+            <div className="section-title mb-2">{t.setup.step2}</div>
             <button className="btn primary mb-4" onClick={addFolders} disabled={busy}>
               {busy ? <Loader2 size={15} className="spin" /> : <FolderOpen size={15} />}
-              选择文件夹
+              {t.setup.chooseFolders}
             </button>
             <p className="mb-2 text-[11.5px] leading-5 text-[var(--muted)]">
-              当前索引库：<span className="mono">{status.library.path}</span>
+              {t.setup.currentLibraryPrefix}
+              <span className="mono">{status.library.path}</span>
             </p>
             {status.library.fallback && (
-              <p className="mb-2 text-[11.5px] leading-5 text-[#ff9500]">
-                程序目录不可写，已自动回退到应用支持目录；可在设置中迁移。
-              </p>
+              <p className="mb-2 text-[11.5px] leading-5 text-[#ff9500]">{t.setup.fallback}</p>
             )}
           </>
         )}
@@ -123,13 +122,12 @@ export function Setup({ status, onRefresh }: Props) {
         <div className="mt-2 flex items-start gap-2 rounded-xl border border-[var(--border)] p-3 text-[12px] text-[var(--muted)]">
           <ShieldAlert size={16} className="mt-0.5 shrink-0" />
           <div className="flex-1">
-            如果添加 ~/Documents、~/Desktop 等目录时读不到文件，需要在系统设置中授予
-            “完全磁盘访问权限”。
+            {t.setup.permission}
             <button
               className="btn ghost ml-2 !px-2 !py-0.5 text-[12px]"
               onClick={() => api.openPrivacySettings()}
             >
-              打开设置
+              {t.actions.openSettings}
             </button>
           </div>
         </div>

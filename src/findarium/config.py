@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# Shown as the native window title, so it carries both names.
 APP_TITLE = "Findarium · 寻册"
 DEFAULT_WINDOW_SIZE = (1320, 860)
 MIN_WINDOW_SIZE = (980, 640)

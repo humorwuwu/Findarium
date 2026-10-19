@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
 import type { GraphData } from "../types";
+import { useI18n } from "../i18n";
 
 interface Props {
   data: GraphData;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function RelationGraph({ data, onSelect }: Props) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ export function RelationGraph({ data, onSelect }: Props) {
   }, [data, onSelect]);
 
   if (!data.nodes.length) {
-    return <div className="text-[12px] text-[var(--muted)]">暂无关系数据。</div>;
+    return <div className="text-[12px] text-[var(--muted)]">{t.graph.empty}</div>;
   }
   return <div ref={containerRef} className="h-[320px] w-full rounded-xl border border-[var(--border)]" />;
 }

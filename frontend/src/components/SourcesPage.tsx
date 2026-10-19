@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 import { api, pickFolders } from "../api";
 import type { Source } from "../types";
-import { formatTime } from "../format";
+import { useI18n } from "../i18n";
 
 interface Props {
   onRefresh: () => void;
 }
 
 export function SourcesPage({ onRefresh }: Props) {
+  const { t, time } = useI18n();
   const [sources, setSources] = useState<Source[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function SourcesPage({ onRefresh }: Props) {
   }
 
   async function remove(id: number) {
-    if (!window.confirm("移除该目录会删除它在本索引库中的所有内容，确定继续？")) return;
+    if (!window.confirm(t.sources.removeConfirm)) return;
     setBusy(true);
     try {
       await api.removeSource(id);
@@ -61,14 +62,12 @@ export function SourcesPage({ onRefresh }: Props) {
     <div className="mx-auto w-full max-w-[900px] p-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="text-[18px] font-semibold">索引目录</div>
-          <div className="text-[12px] text-[var(--muted)]">
-            已索引目录会实时监听变化，并每 10 分钟做一次校对扫描。
-          </div>
+          <div className="text-[18px] font-semibold">{t.sources.title}</div>
+          <div className="text-[12px] text-[var(--muted)]">{t.sources.subtitle}</div>
         </div>
         <button className="btn primary" onClick={add} disabled={busy}>
           <FolderOpen size={15} />
-          添加文件夹
+          {t.actions.addFolder}
         </button>
       </div>
 
@@ -90,25 +89,33 @@ export function SourcesPage({ onRefresh }: Props) {
                   {source.path}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                  <span className="chip neutral">{source.document_count} 个文档</span>
+                  <span className="chip neutral">{t.sources.documents(source.document_count)}</span>
                   {source.encrypted_count > 0 && (
-                    <span className="chip warn">{source.encrypted_count} 个加密</span>
+                    <span className="chip warn">
+                      {t.sources.encrypted(source.encrypted_count)}
+                    </span>
                   )}
                   {source.failed_count > 0 && (
-                    <span className="chip danger">{source.failed_count} 个失败</span>
+                    <span className="chip danger">{t.sources.failed(source.failed_count)}</span>
                   )}
                   <span className="chip neutral">
-                    最后扫描 {source.last_scan_at ? formatTime(source.last_scan_at * 1_000_000_000) : "尚未"}
+                    {t.sources.lastScan(
+                      source.last_scan_at
+                        ? time(source.last_scan_at * 1_000_000_000)
+                        : t.sources.never,
+                    )}
                   </span>
                 </div>
                 {source.last_error && (
                   <div className="mt-2 text-[11.5px] text-[var(--danger)]">{source.last_error}</div>
                 )}
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="shrink-0 text-[11px] text-[var(--muted)]">排除规则</span>
+                  <span className="shrink-0 text-[11px] text-[var(--muted)]">
+                    {t.sources.excludeRules}
+                  </span>
                   <input
                     className="input mono !py-1 !text-[11px]"
-                    placeholder="例如 *.tmp、临时/*"
+                    placeholder={t.sources.excludePlaceholder}
                     defaultValue={source.exclude_globs}
                     onBlur={async (event) => {
                       await api.patchSource(source.id, {
@@ -123,7 +130,7 @@ export function SourcesPage({ onRefresh }: Props) {
               <div className="flex gap-1">
                 <button
                   className="btn ghost !p-2"
-                  title="立即扫描"
+                  title={t.actions.scanNow}
                   onClick={async () => {
                     await api.scanSource(source.id);
                     onRefresh();
@@ -133,7 +140,7 @@ export function SourcesPage({ onRefresh }: Props) {
                 </button>
                 <button
                   className="btn ghost danger !p-2"
-                  title="移除目录"
+                  title={t.actions.removeFolder}
                   onClick={() => remove(source.id)}
                 >
                   <Trash2 size={14} />
@@ -144,7 +151,7 @@ export function SourcesPage({ onRefresh }: Props) {
         ))}
         {sources.length === 0 && (
           <div className="panel p-6 text-center text-[12.5px] text-[var(--muted)]">
-            还没有索引目录，点击右上角添加。
+            {t.sources.empty}
           </div>
         )}
       </div>

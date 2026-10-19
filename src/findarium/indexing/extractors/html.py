@@ -4,6 +4,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from ...i18n import index_lang, msg, translate
 from .base import (
     Block,
     ExtractedDocument,
@@ -82,7 +83,9 @@ def extract(path: Path) -> ExtractedDocument:
         links_for_doc.extend(links)
         kind = "heading" if name in _HEADING_TAGS else "html"
         location_label = (
-            " / ".join(heading_path) if heading_path else f"段落 {index}"
+            " / ".join(heading_path)
+            if heading_path
+            else translate("location.paragraph", index_lang(), index=index)
         )
         blocks.append(
             Block(
@@ -116,7 +119,7 @@ def extract(path: Path) -> ExtractedDocument:
             ]
         },
         blocks=blocks,
-        warnings=["文档内容超过字符上限，索引已截断"] if truncated else [],
+        warnings=[msg("warn.truncated")] if truncated else [],
         partial=truncated,
         word_count=count_words(full_text),
     )

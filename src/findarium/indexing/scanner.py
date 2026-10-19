@@ -16,6 +16,7 @@ from ..config import (
 )
 from ..db import Database
 from ..db.ops import mark_document_missing, now_ts
+from ..i18n import msg
 from ..paths import LibraryPaths
 
 logger = logging.getLogger(__name__)
@@ -71,11 +72,11 @@ class Scanner:
         root = Path(source["path"])
         if not root.is_dir():
             report.unavailable = True
-            report.errors.append("来源目录不可用，未清理已有索引")
+            report.errors.append(msg("source.not_cleared"))
             with self.db.transaction() as conn:
                 conn.execute(
                     "UPDATE sources SET last_error = ? WHERE id = ?",
-                    ("来源目录不可用", source_id),
+                    (msg("source.unavailable"), source_id),
                 )
             return report
 

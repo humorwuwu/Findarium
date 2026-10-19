@@ -7,6 +7,7 @@ from typing import Any
 from charset_normalizer import from_bytes
 
 from ...config import MAX_FILE_BYTES, MAX_TEXT_CHARS
+from ...i18n import msg
 from ..tokenizer import normalize_text
 
 
@@ -67,7 +68,7 @@ def read_text(path: Path) -> str:
     size = path.stat().st_size
     if size > MAX_FILE_BYTES:
         raise DocumentTooLargeError(
-            f"文件超过 {MAX_FILE_BYTES // (1024 * 1024)} MB 限制"
+            msg("error.too_large", limit=MAX_FILE_BYTES // (1024 * 1024))
         )
     data = path.read_bytes()
     match = from_bytes(data).best()

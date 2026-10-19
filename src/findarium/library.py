@@ -10,6 +10,7 @@ from typing import Any
 
 from .db import Database
 from .events import EventBus
+from .i18n import DEFAULT_LANG, resolve_setting, system_lang, translate
 from .indexing.coordinator import IndexCoordinator
 from .paths import (
     LibraryPaths,
@@ -25,7 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 class LibraryError(RuntimeError):
-    pass
+    """Library failure carrying an i18n message key and its parameters."""
+
+    def __init__(self, key: str, **params: Any) -> None:
+        super().__init__(key)
+        self.key = key
+        self.params = params
+
+    def localized(self, lang: str = DEFAULT_LANG) -> str:
+        return translate(self.key, lang, **self.params)
 
 
 class AppContext:
@@ -58,14 +67,14 @@ class AppContext:
     ) -> None:
         root = root.expanduser().resolve()
         if root.exists() and not root.is_dir():
-            raise LibraryError("索引库位置必须是一个文件夹")
+            raise LibraryError("err.library_not_a_folder")
         paths = LibraryPaths(root)
         try:
             paths.create()
         except OSError as exc:
-            raise LibraryError(f"无法创建索引库目录：{exc}") from exc
+            raise LibraryError("err.library_create_failed", error=str(exc)) from exc
         if not os.access(paths.root, os.R_OK | os.W_OK):
-            raise LibraryError("索引库目录不可读写")
+            raise LibraryError("err.library_not_writable")
         with self._lock:
             self.detach()
         self._install_file_logging(paths)
@@ -187,6 +196,18 @@ class AppContext:
                 except OSError:
                     logger.warning("could not move %s", directory)
         self.attach(new_root)
+
+    # -------------------------------------------------------------- language
+
+    def language(self) -> str:
+        """The language the UI should use (``auto`` follows the system)."""
+        if self.db is None:
+            return system_lang()
+        try:
+            row = self.db.fetchone("SELECT value FROM settings WHERE key = 'language'")
+        except Exception:
+            return system_lang()
+        return resolve_setting(row["value"] if row is not None else None)
 
     # ---------------------------------------------------------------- status
 

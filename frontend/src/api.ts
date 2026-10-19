@@ -22,6 +22,14 @@ const params = new URLSearchParams(window.location.search);
 export const TOKEN = params.get("token") ?? "";
 export const API_BASE = (params.get("api") ?? "").replace(/\/$/, "");
 
+// The UI language, so backend-generated text (tags, reasons, errors, location
+// labels) comes back localized. Set by the i18n provider.
+let language = "zh-CN";
+
+export function setApiLanguage(value: string): void {
+  language = value;
+}
+
 function url(path: string): string {
   return `${API_BASE}${path}`;
 }
@@ -32,6 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       "X-Findarium-Token": TOKEN,
+      "X-Findarium-Lang": language,
       ...(init?.headers ?? {}),
     },
   });
@@ -143,7 +152,8 @@ export const api = {
       method: "POST",
     }),
   fileUrl: (id: number) => `${url(`/api/documents/${id}/file`)}?token=${encodeURIComponent(TOKEN)}`,
-  eventsUrl: () => `${url("/api/events")}?token=${encodeURIComponent(TOKEN)}`,
+  eventsUrl: () =>
+    `${url("/api/events")}?token=${encodeURIComponent(TOKEN)}&lang=${encodeURIComponent(language)}`,
 };
 
 export async function pickFolder(): Promise<string | null> {

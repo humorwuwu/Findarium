@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n";
+
 export interface Filters {
   ext: string[];
   time: string;
@@ -12,30 +14,30 @@ export const DEFAULT_FILTERS: Filters = {
   sort: "relevance",
 };
 
-const EXTENSIONS: { value: string; label: string }[] = [
-  { value: "pdf", label: "PDF" },
-  { value: "docx", label: "Word" },
-  { value: "xlsx", label: "Excel" },
-  { value: "pptx", label: "PPT" },
-  { value: "md", label: "Markdown" },
-  { value: "txt", label: "文本" },
-  { value: "html", label: "网页" },
-];
-
-const TIMES: { value: string; label: string }[] = [
-  { value: "any", label: "不限时间" },
-  { value: "today", label: "今天" },
-  { value: "week", label: "最近 7 天" },
-  { value: "month", label: "最近 30 天" },
-  { value: "year", label: "今年" },
-];
-
 interface Props {
   filters: Filters;
   onChange: (filters: Filters) => void;
 }
 
 export function FilterBar({ filters, onChange }: Props) {
+  const { t } = useI18n();
+  const extensions: { value: string; label: string }[] = [
+    { value: "pdf", label: "PDF" },
+    { value: "docx", label: "Word" },
+    { value: "xlsx", label: "Excel" },
+    { value: "pptx", label: "PPT" },
+    { value: "md", label: "Markdown" },
+    { value: "txt", label: t.filters.text },
+    { value: "html", label: t.filters.web },
+  ];
+  const times: { value: string; label: string }[] = [
+    { value: "any", label: t.filters.anyTime },
+    { value: "today", label: t.filters.today },
+    { value: "week", label: t.filters.last7 },
+    { value: "month", label: t.filters.last30 },
+    { value: "year", label: t.filters.thisYear },
+  ];
+
   function toggleExt(value: string) {
     const next = filters.ext.includes(value)
       ? filters.ext.filter((item) => item !== value)
@@ -45,7 +47,7 @@ export function FilterBar({ filters, onChange }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--border)] px-4 py-2">
-      {EXTENSIONS.map((item) => (
+      {extensions.map((item) => (
         <button
           key={item.value}
           className={`chip ${filters.ext.includes(item.value) ? "" : "neutral"}`}
@@ -60,7 +62,7 @@ export function FilterBar({ filters, onChange }: Props) {
         value={filters.time}
         onChange={(event) => onChange({ ...filters, time: event.target.value })}
       >
-        {TIMES.map((item) => (
+        {times.map((item) => (
           <option key={item.value} value={item.value}>
             {item.label}
           </option>
@@ -71,18 +73,18 @@ export function FilterBar({ filters, onChange }: Props) {
         value={filters.encrypted}
         onChange={(event) => onChange({ ...filters, encrypted: event.target.value })}
       >
-        <option value="any">全部文件</option>
-        <option value="only">只看加密</option>
-        <option value="exclude">排除加密</option>
+        <option value="any">{t.filters.allFiles}</option>
+        <option value="only">{t.filters.onlyEncrypted}</option>
+        <option value="exclude">{t.filters.excludeEncrypted}</option>
       </select>
       <select
         className="ml-auto rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-[11.5px]"
         value={filters.sort}
         onChange={(event) => onChange({ ...filters, sort: event.target.value })}
       >
-        <option value="relevance">按相关度</option>
-        <option value="modified">按修改时间</option>
-        <option value="created">按创建时间</option>
+        <option value="relevance">{t.filters.sortRelevance}</option>
+        <option value="modified">{t.filters.sortModified}</option>
+        <option value="created">{t.filters.sortCreated}</option>
       </select>
     </div>
   );

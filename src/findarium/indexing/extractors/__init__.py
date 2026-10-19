@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...i18n import msg
 from .base import (
     Block,
     CorruptDocumentError,
@@ -58,7 +59,7 @@ def extract_document(path: Path) -> ExtractedDocument:
         from . import text
 
         return text.extract_csv(path)
-    raise UnsupportedDocumentError(f"暂不支持的文件类型：{ext}")
+    raise UnsupportedDocumentError(msg("error.unsupported_type", ext=ext))
 
 
 __all__ = [

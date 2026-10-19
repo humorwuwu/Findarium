@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { ExternalLink, FolderSearch, Lock, ScanSearch } from "lucide-react";
 import { api } from "../api";
 import type { EncryptedDocument } from "../types";
-import { formatBytes, formatTime } from "../format";
+import { useI18n } from "../i18n";
 
 export function EncryptedPage() {
+  const { t, bytes, time } = useI18n();
   const [items, setItems] = useState<EncryptedDocument[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -30,14 +31,12 @@ export function EncryptedPage() {
     <div className="mx-auto w-full max-w-[900px] p-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="text-[18px] font-semibold">加密 / 受保护文件</div>
-          <div className="text-[12px] text-[var(--muted)]">
-            这些文件只记录了文件名和路径，没有提取正文。文件解密后会自动重新索引；应用不会尝试解密或绕过加密。
-          </div>
+          <div className="text-[18px] font-semibold">{t.encrypted.title}</div>
+          <div className="text-[12px] text-[var(--muted)]">{t.encrypted.subtitle}</div>
         </div>
         <button className="btn" onClick={recheckAll} disabled={busy}>
           <ScanSearch size={15} />
-          全部重新检测
+          {t.encrypted.recheckAll}
         </button>
       </div>
 
@@ -49,9 +48,11 @@ export function EncryptedPage() {
               <div className="truncate text-[13px] font-medium">{item.name}</div>
               <div className="mono truncate text-[11px] text-[var(--muted)]">{item.path}</div>
               <div className="mt-1 text-[11.5px] text-[var(--muted)]">
-                {item.encryption_kind || item.status} · {formatBytes(item.size_bytes)} ·{" "}
-                {formatTime(item.mtime_ns)}
-                {item.last_probe_at ? ` · 最后检测 ${formatTime(item.last_probe_at * 1_000_000_000)}` : ""}
+                {item.encryption_kind || item.status} · {bytes(item.size_bytes)} ·{" "}
+                {time(item.mtime_ns)}
+                {item.last_probe_at
+                  ? t.encrypted.lastProbe(time(item.last_probe_at * 1_000_000_000))
+                  : ""}
               </div>
             </div>
             <button className="btn ghost !p-2" onClick={() => api.probeDocument(item.id).then(load)}>
@@ -67,7 +68,7 @@ export function EncryptedPage() {
         ))}
         {items.length === 0 && (
           <div className="panel p-6 text-center text-[12.5px] text-[var(--muted)]">
-            当前没有检测到加密文件。
+            {t.encrypted.empty}
           </div>
         )}
       </div>

@@ -17,6 +17,14 @@ from ..config import (
 )
 from ..db import Database
 from ..db.ops import now_ts
+from ..i18n import (
+    DEFAULT_LANG,
+    join_list,
+    localize_list,
+    localize_stored,
+    location_label,
+    translate,
+)
 from ..indexing.embeddings import (
     ChunkVectorIndex,
     EmbeddingProvider,
@@ -60,8 +68,8 @@ def _iso_from_ns(value: int | None) -> str | None:
         return None
 
 
-def _summary(row: dict[str, Any]) -> dict[str, Any]:
-    summary = document_summary(row)
+def _summary(row: dict[str, Any], lang: str = DEFAULT_LANG) -> dict[str, Any]:
+    summary = document_summary(row, lang)
     summary.update(
         {
             "rel_path": row.get("rel_path"),
@@ -70,7 +78,7 @@ def _summary(row: dict[str, Any]) -> dict[str, Any]:
             "birthtime": _iso_from_ns(row.get("birthtime_ns")),
             "indexed_at": row.get("indexed_at"),
             "last_probe_at": row.get("last_probe_at"),
-            "error": row.get("error"),
+            "error": localize_stored(row.get("error"), lang),
             "encryption_kind": row.get("encryption_kind"),
         }
     )
@@ -112,6 +120,7 @@ class SearchService:
         encrypted: str | None = None,
         sort: str | None = None,
         limit: int = SEARCH_LIMIT,
+        lang: str = DEFAULT_LANG,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         parsed = parse_query(
@@ -122,12 +131,14 @@ class SearchService:
             folder=folder,
             encrypted=encrypted,
             sort=sort,
+            lang=lang,
         )
         if not parsed.has_text:
-            items = self._recent_items(parsed.filters, limit)
+            items = self._recent_items(parsed.filters, limit, lang)
             return {
                 "query": parsed.raw,
-                "explanation": parsed.explanation or ["未输入关键词，显示最近修改的文档"],
+                "explanation": parsed.explanation
+                or [translate("explain.no_query", lang)],
                 "filters": parsed.filters.as_dict(),
                 "items": items,
                 "total": len(items),
@@ -191,10 +202,10 @@ class SearchService:
         fused = rrf_fuse(channels)
         normalize_scores(fused)
         if not fused:
-            items = self._recent_items(parsed.filters, limit)
+            items = self._recent_items(parsed.filters, limit, lang)
             return {
                 "query": parsed.raw,
-                "explanation": parsed.explanation + ["没有匹配结果，显示最近文档"],
+                "explanation": parsed.explanation + [translate("explain.no_match", lang)],
                 "filters": parsed.filters.as_dict(),
                 "items": items,
                 "total": 0,
@@ -261,27 +272,25 @@ class SearchService:
                 chunk_lookup=chunk_lookup,
                 semantic_chunks=semantic_chunks,
                 include_related=True,
+                lang=lang,
             )
             for item in top
         ]
+        channels_seen = {channel for item in results for channel in item["channels"]}
+        sources = join_list(
+            [
+                translate(f"explain.source.{name}", lang)
+                if name in ("keyword", "file", "semantic", "fuzzy")
+                else name
+                for name in channels_seen
+            ],
+            lang,
+        )
         return {
             "query": parsed.raw,
             "content_query": parsed.content_text,
             "explanation": parsed.explanation
-            + [
-                "匹配来源："
-                + "、".join(
-                    {
-                        "keyword": "正文关键词",
-                        "file": "文件名/路径",
-                        "semantic": "语义相似",
-                        "fuzzy": "模糊匹配",
-                    }.get(name, name)
-                    for name in {
-                        channel for item in results for channel in item["channels"]
-                    }
-                )
-            ]
+            + [translate("explain.match_sources", lang, sources=sources)]
             if results
             else parsed.explanation,
             "filters": parsed.filters.as_dict(),
@@ -293,18 +302,25 @@ class SearchService:
 
     # ------------------------------------------------------------ documents
 
-    def recent(self, limit: int = 30, **filter_kwargs) -> list[dict[str, Any]]:
-        parsed = parse_query("", **filter_kwargs)
-        return self._recent_items(parsed.filters, limit)
+    def recent(
+        self, limit: int = 30, lang: str = DEFAULT_LANG, **filter_kwargs
+    ) -> list[dict[str, Any]]:
+        parsed = parse_query("", lang=lang, **filter_kwargs)
+        return self._recent_items(parsed.filters, limit, lang)
 
-    def get_document(self, document_id: int, include_chunks: bool = True) -> dict[str, Any] | None:
+    def get_document(
+        self,
+        document_id: int,
+        include_chunks: bool = True,
+        lang: str = DEFAULT_LANG,
+    ) -> dict[str, Any] | None:
         row = self.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
         if row is None:
             return None
         row_dict = dict(row)
         metadata = _parse_json(row_dict.get("metadata_json"), {})
-        result = _summary(row_dict)
-        result["warnings"] = metadata.get("warnings", [])
+        result = _summary(row_dict, lang)
+        result["warnings"] = localize_list(metadata.get("warnings", []), lang)
         result["metadata"] = metadata.get("metadata", {})
         result["keywords"] = [
             {"keyword": item["keyword"], "weight": float(item["weight"])}
@@ -315,22 +331,30 @@ class SearchService:
             )
         ]
         if include_chunks:
-            result["chunks"] = [
-                {
-                    **dict(chunk),
-                    "location_json": _parse_json(chunk["location_json"], {}),
-                    "heading_path": _parse_json(chunk["heading_path"], []),
-                }
-                for chunk in chunks_for_document(self.db, document_id)
-            ]
-        result["related"] = self.related_service.related(document_id, limit=8)
+            chunks = []
+            for chunk in chunks_for_document(self.db, document_id):
+                location = _parse_json(chunk["location_json"], {})
+                chunks.append(
+                    {
+                        **dict(chunk),
+                        "location_json": location,
+                        "location_label": location_label(
+                            location, lang, chunk["location_label"]
+                        ),
+                        "heading_path": _parse_json(chunk["heading_path"], []),
+                    }
+                )
+            result["chunks"] = chunks
+        result["related"] = self.related_service.related(document_id, limit=8, lang=lang)
         return result
 
-    def graph(self, document_id: int) -> dict[str, Any]:
-        return self.related_service.graph(document_id)
+    def graph(self, document_id: int, lang: str = DEFAULT_LANG) -> dict[str, Any]:
+        return self.related_service.graph(document_id, lang=lang)
 
-    def related(self, document_id: int, limit: int = 8) -> list[dict[str, Any]]:
-        return self.related_service.related(document_id, limit=limit)
+    def related(
+        self, document_id: int, limit: int = 8, lang: str = DEFAULT_LANG
+    ) -> list[dict[str, Any]]:
+        return self.related_service.related(document_id, limit=limit, lang=lang)
 
     def feedback(self, query: str, document_id: int, action: str = "click") -> None:
         with self.db.transaction() as conn:
@@ -346,7 +370,7 @@ class SearchService:
                     (now_ts(), document_id),
                 )
 
-    def suggestions(self) -> dict[str, Any]:
+    def suggestions(self, lang: str = DEFAULT_LANG) -> dict[str, Any]:
         queries = [
             row["query"]
             for row in self.db.fetchall(
@@ -354,12 +378,14 @@ class SearchService:
                 "WHERE query != '' GROUP BY normalized_query ORDER BY latest DESC LIMIT 8"
             )
         ]
-        recent = self._recent_items(SearchFilters(), 8)
+        recent = self._recent_items(SearchFilters(), 8, lang)
         return {"queries": queries, "recent": recent}
 
     # -------------------------------------------------------------- internals
 
-    def _recent_items(self, filters: SearchFilters, limit: int) -> list[dict[str, Any]]:
+    def _recent_items(
+        self, filters: SearchFilters, limit: int, lang: str = DEFAULT_LANG
+    ) -> list[dict[str, Any]]:
         rows = recent_documents(self.db, filters, limit=limit)
         return [
             {
@@ -367,10 +393,10 @@ class SearchService:
                 "score": 0.0,
                 "relevance": 0.0,
                 "channels": [],
-                "tags": self._tags(dict(row), set()),
+                "tags": self._tags(dict(row), set(), lang),
                 "matches": [],
                 "related": [],
-                "document": _summary(dict(row)),
+                "document": _summary(dict(row), lang),
             }
             for row in rows
         ]
@@ -383,6 +409,7 @@ class SearchService:
         chunk_lookup: dict[int, dict[str, Any]],
         semantic_chunks: dict[int, int],
         include_related: bool,
+        lang: str = DEFAULT_LANG,
     ) -> dict[str, Any]:
         row = item["row"]
         document_id = item["document_id"]
@@ -401,7 +428,11 @@ class SearchService:
                 {
                     "chunk_id": chunk_id,
                     "source": "keyword",
-                    "location_label": chunk.get("location_label"),
+                    "location_label": location_label(
+                        _parse_json(chunk.get("location_json"), {}),
+                        lang,
+                        chunk.get("location_label"),
+                    ),
                     "location_json": _parse_json(chunk.get("location_json"), {}),
                     "snippet": snippet.text,
                     "spans": [list(span) for span in snippet.spans],
@@ -421,7 +452,11 @@ class SearchService:
                     {
                         "chunk_id": semantic_chunk_id,
                         "source": "semantic",
-                        "location_label": chunk.get("location_label"),
+                        "location_label": location_label(
+                            _parse_json(chunk.get("location_json"), {}),
+                            lang,
+                            chunk.get("location_label"),
+                        ),
                         "location_json": _parse_json(chunk.get("location_json"), {}),
                         "snippet": snippet.text,
                         "spans": [],
@@ -438,7 +473,11 @@ class SearchService:
                     {
                         "chunk_id": int(chunk["id"]),
                         "source": "document",
-                        "location_label": chunk.get("location_label"),
+                        "location_label": location_label(
+                            _parse_json(chunk.get("location_json"), {}),
+                            lang,
+                            chunk.get("location_label"),
+                        ),
                         "location_json": _parse_json(chunk.get("location_json"), {}),
                         "snippet": snippet.text,
                         "spans": [],
@@ -449,11 +488,11 @@ class SearchService:
         related: list[dict[str, Any]] = []
         if include_related and row.get("status") not in ("missing",):
             try:
-                related = self.related_service.related(document_id, limit=3)
+                related = self.related_service.related(document_id, limit=3, lang=lang)
             except Exception:
                 related = []
 
-        tags = self._tags(row, set(item.get("channels", [])))
+        tags = self._tags(row, set(item.get("channels", [])), lang)
         return {
             "document_id": document_id,
             "score": round(float(item["score"]), 4),
@@ -462,23 +501,30 @@ class SearchService:
             "tags": tags,
             "matches": matches,
             "related": related,
-            "document": _summary(row),
+            "document": _summary(row, lang),
         }
 
-    def _tags(self, row: dict[str, Any], channels: set[str]) -> list[str]:
+    def _tags(
+        self, row: dict[str, Any], channels: set[str], lang: str = DEFAULT_LANG
+    ) -> list[str]:
         tags: list[str] = []
         if "keyword" in channels:
-            tags.append("关键词")
+            tags.append(translate("tag.keyword", lang))
         if "file" in channels:
-            tags.append("文件名")
+            tags.append(translate("tag.filename", lang))
         if "semantic" in channels:
-            tags.append("语义相关")
+            tags.append(translate("tag.semantic", lang))
         if "fuzzy" in channels:
-            tags.append("模糊匹配")
+            tags.append(translate("tag.fuzzy", lang))
         if row.get("status") in ("encrypted", "encrypted_suspected"):
-            tags.append("已加密" if row["status"] == "encrypted" else "疑似加密")
+            tags.append(
+                translate(
+                    "tag.encrypted" if row["status"] == "encrypted" else "tag.encrypted_suspected",
+                    lang,
+                )
+            )
         if row.get("status") == "indexed_partial":
-            tags.append("部分索引")
+            tags.append(translate("tag.partial", lang))
         mtime_ns = row.get("mtime_ns") or 0
         if mtime_ns:
             age_days = (
@@ -486,9 +532,9 @@ class SearchService:
                 - datetime.fromtimestamp(mtime_ns / 1_000_000_000, tz=UTC)
             ).total_seconds() / 86400.0
             if age_days <= _RECENT_TAG_DAYS:
-                tags.append("最近修改")
+                tags.append(translate("tag.recent_modified", lang))
         if row.get("last_opened_at"):
-            tags.append("最近打开")
+            tags.append(translate("tag.recent_opened", lang))
         return tags
 
     def _ordered_chunk_documents(self, chunk_rows: list[dict[str, Any]]) -> list[int]:

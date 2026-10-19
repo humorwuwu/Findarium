@@ -16,6 +16,7 @@ from ..config import (
     DEFAULT_SCAN_INTERVAL_SECONDS,
 )
 from ..db.ops import delete_document
+from ..i18n import AUTO_LANG, localize_stored, resolve_lang, translate
 from ..library import AppContext, LibraryError
 from ..native import (
     choose_folder_via_osascript,
@@ -53,10 +54,18 @@ def get_ctx(request: Request) -> AppContext:
     return request.app.state.ctx
 
 
+def request_lang(request: Request) -> str:
+    """Resolve the language for this request: query, header, then the setting."""
+    explicit = request.query_params.get("lang") or request.headers.get("x-findarium-lang")
+    if explicit:
+        return resolve_lang(explicit)
+    return get_ctx(request).language()
+
+
 def require_library(request: Request) -> AppContext:
     ctx = get_ctx(request)
     if not ctx.ready:
-        raise HTTPException(status_code=409, detail="索引库尚未初始化")
+        raise HTTPException(status_code=409, detail="err.library_not_initialized")
     return ctx
 
 
@@ -85,9 +94,12 @@ def initialize_library(body: LibraryBody, request: Request) -> dict[str, Any]:
             remember=True,
         )
     except LibraryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=exc.localized(request_lang(request))) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"初始化索引库失败：{exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=translate("err.library_init_failed", request_lang(request), error=str(exc)),
+        ) from exc
     return ctx.status()
 
 
@@ -97,17 +109,20 @@ def relocate_library(body: LibraryBody, request: Request) -> dict[str, Any]:
     try:
         ctx.relocate(Path(body.path))
     except LibraryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=exc.localized(request_lang(request))) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"迁移索引库失败：{exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=translate("err.library_move_failed", request_lang(request), error=str(exc)),
+        ) from exc
     return ctx.status()
 
 
 @router.post("/native/pick-folder")
-def pick_folder() -> dict[str, Any]:
-    path = choose_folder_via_osascript()
+def pick_folder(request: Request) -> dict[str, Any]:
+    path = choose_folder_via_osascript(lang=request_lang(request))
     if not path:
-        raise HTTPException(status_code=501, detail="无法打开系统目录选择器")
+        raise HTTPException(status_code=501, detail="err.folder_picker_failed")
     return {"path": path}
 
 
@@ -132,7 +147,11 @@ def list_sources(request: Request) -> list[dict[str, Any]]:
         "AS failed_count "
         "FROM sources s ORDER BY s.id"
     )
-    return [dict(row) for row in rows]
+    lang = request_lang(request)
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["last_error"] = localize_stored(item.get("last_error"), lang)
+    return items
 
 
 @router.post("/sources")
@@ -141,13 +160,13 @@ def add_source(body: SourceBody, request: Request) -> dict[str, Any]:
     assert ctx.db is not None
     path = Path(body.path).expanduser().resolve()
     if not path.is_dir():
-        raise HTTPException(status_code=400, detail="目录不存在或不可访问")
+        raise HTTPException(status_code=400, detail="err.folder_unavailable")
     existing = ctx.db.fetchall("SELECT id, path FROM sources")
     for row in existing:
         old = Path(row["path"])
         if path == old or path.is_relative_to(old) or old.is_relative_to(path):
             raise HTTPException(
-                status_code=400, detail="该目录与已索引目录重叠，请避免重复添加"
+                status_code=400, detail="err.folder_overlap"
             )
     with ctx.db.transaction() as conn:
         cursor = conn.execute(
@@ -239,6 +258,7 @@ def search(
         encrypted=encrypted,
         sort=sort,
         limit=max(1, min(limit, 100)),
+        lang=request_lang(request),
     )
 
 
@@ -246,7 +266,7 @@ def search(
 def suggestions(request: Request) -> dict[str, Any]:
     ctx = require_library(request)
     assert ctx.search is not None
-    return ctx.search.suggestions()
+    return ctx.search.suggestions(lang=request_lang(request))
 
 
 @router.post("/search/feedback")
@@ -264,9 +284,9 @@ def feedback(body: FeedbackBody, request: Request) -> dict[str, bool]:
 def get_document(document_id: int, request: Request) -> dict[str, Any]:
     ctx = require_library(request)
     assert ctx.search is not None
-    document = ctx.search.get_document(document_id)
+    document = ctx.search.get_document(document_id, lang=request_lang(request))
     if document is None:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail="err.document_not_found")
     return document
 
 
@@ -274,9 +294,11 @@ def get_document(document_id: int, request: Request) -> dict[str, Any]:
 def get_chunks(document_id: int, request: Request) -> list[dict[str, Any]]:
     ctx = require_library(request)
     assert ctx.search is not None
-    document = ctx.search.get_document(document_id, include_chunks=True)
+    document = ctx.search.get_document(
+        document_id, include_chunks=True, lang=request_lang(request)
+    )
     if document is None:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail="err.document_not_found")
     return document.get("chunks", [])
 
 
@@ -284,14 +306,14 @@ def get_chunks(document_id: int, request: Request) -> list[dict[str, Any]]:
 def get_related(document_id: int, request: Request) -> list[dict[str, Any]]:
     ctx = require_library(request)
     assert ctx.search is not None
-    return ctx.search.related(document_id)
+    return ctx.search.related(document_id, lang=request_lang(request))
 
 
 @router.get("/documents/{document_id}/graph")
 def get_graph(document_id: int, request: Request) -> dict[str, Any]:
     ctx = require_library(request)
     assert ctx.search is not None
-    return ctx.search.graph(document_id)
+    return ctx.search.graph(document_id, lang=request_lang(request))
 
 
 @router.get("/documents/{document_id}/file")
@@ -300,12 +322,12 @@ def get_file(document_id: int, request: Request) -> FileResponse:
     assert ctx.db is not None
     row = ctx.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
     if row is None or row["status"] == "missing":
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail="err.document_not_found")
     if row["ext"] != ".pdf":
-        raise HTTPException(status_code=400, detail="只有 PDF 支持应用内预览")
+        raise HTTPException(status_code=400, detail="err.pdf_only")
     path = Path(row["path"])
     if not path.exists():
-        raise HTTPException(status_code=404, detail="文件已被移动或删除")
+        raise HTTPException(status_code=404, detail="err.file_missing")
     return FileResponse(path, media_type="application/pdf", filename=row["name"])
 
 
@@ -313,16 +335,16 @@ def _require_document_path(ctx: AppContext, document_id: int) -> tuple[dict[str,
     assert ctx.db is not None
     row = ctx.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
     if row is None:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail="err.document_not_found")
     path = Path(row["path"])
     if not path.exists():
-        raise HTTPException(status_code=404, detail="文件已被移动或删除")
+        raise HTTPException(status_code=404, detail="err.file_missing")
     source = ctx.db.fetchone("SELECT path FROM sources WHERE id = ?", (row["source_id"],))
     if source is not None:
         root = Path(source["path"])
         try:
             if not path.resolve().is_relative_to(root.resolve()):
-                raise HTTPException(status_code=403, detail="文件不在已索引目录内")
+                raise HTTPException(status_code=403, detail="err.file_outside_sources")
         except OSError:
             pass
     return dict(row), path
@@ -354,7 +376,7 @@ def reindex_document(document_id: int, request: Request) -> dict[str, bool]:
     assert ctx.db is not None and ctx.coordinator is not None
     row = ctx.db.fetchone("SELECT path, source_id FROM documents WHERE id = ?", (document_id,))
     if row is None:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail="err.document_not_found")
     ctx.coordinator.queue_index(row["path"], int(row["source_id"]), force=True)
     return {"ok": True}
 
@@ -379,7 +401,11 @@ def list_encrypted(request: Request) -> list[dict[str, Any]]:
         "error, last_probe_at FROM documents "
         "WHERE status IN ('encrypted', 'encrypted_suspected') ORDER BY mtime_ns DESC"
     )
-    return [dict(row) for row in rows]
+    lang = request_lang(request)
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["error"] = localize_stored(item.get("error"), lang)
+    return items
 
 
 @router.post("/encrypted/recheck")
@@ -398,6 +424,7 @@ def recheck_encrypted(request: Request) -> dict[str, int]:
 
 
 DEFAULT_SETTINGS: dict[str, Any] = {
+    "language": AUTO_LANG,
     "scan_interval_seconds": DEFAULT_SCAN_INTERVAL_SECONDS,
     "encrypted_recheck_seconds": DEFAULT_ENCRYPTED_RECHECK_SECONDS,
 }
@@ -453,9 +480,13 @@ def list_errors(request: Request) -> dict[str, Any]:
         "SELECT id, name, path, status, error, mtime_ns FROM documents "
         "WHERE status = 'failed' ORDER BY mtime_ns DESC LIMIT 100"
     )
+    lang = request_lang(request)
+    documents = [dict(row) for row in failed_docs]
+    for document in documents:
+        document["error"] = localize_stored(document.get("error"), lang)
     return {
         "jobs": ctx.coordinator.queue.errors(),
-        "documents": [dict(row) for row in failed_docs],
+        "documents": documents,
     }
 
 

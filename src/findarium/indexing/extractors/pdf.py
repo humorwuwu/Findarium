@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pymupdf
 
+from ...i18n import index_lang, msg, translate
 from .base import Block, CorruptDocumentError, ExtractedDocument, count_words
 
 
@@ -11,13 +12,13 @@ def extract(path: Path) -> ExtractedDocument:
     try:
         document = pymupdf.open(str(path))
     except Exception as exc:
-        raise CorruptDocumentError(f"无法打开 PDF：{exc}") from exc
+        raise CorruptDocumentError(msg("protect.pdf_unreadable", error=str(exc))) from exc
 
     if document.needs_pass:
         document.close()
         from .base import EncryptedDocumentError
 
-        raise EncryptedDocumentError("PDF 需要密码")
+        raise EncryptedDocumentError(msg("error.pdf_password"))
 
     metadata = document.metadata or {}
     title = (metadata.get("title") or "").strip() or path.stem
@@ -38,7 +39,7 @@ def extract(path: Path) -> ExtractedDocument:
                 Block(
                     kind="page",
                     text=text,
-                    location_label=f"第 {number} 页",
+                    location_label=translate("location.page", index_lang(), number=number),
                     location_json={"page": number},
                     heading_path=[],
                 )
@@ -50,9 +51,9 @@ def extract(path: Path) -> ExtractedDocument:
 
     warnings: list[str] = []
     if empty_pages and len(empty_pages) == page_count:
-        warnings.append("PDF 没有可提取的文本层，可能是扫描件（首版不做 OCR）")
+        warnings.append(msg("warn.pdf_no_text_layer"))
     elif empty_pages:
-        warnings.append(f"{len(empty_pages)} 页没有可提取的文本层（可能是扫描页）")
+        warnings.append(msg("warn.pdf_empty_pages", count=len(empty_pages)))
 
     full_text = "\n\n".join(all_text)
     return ExtractedDocument(

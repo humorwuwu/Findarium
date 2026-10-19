@@ -8,11 +8,20 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from ..i18n import DEFAULT_LANG, translate
 from .schema import MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION
 
 
 class DatabaseError(RuntimeError):
-    pass
+    """Database failure carrying an i18n message key and its parameters."""
+
+    def __init__(self, key: str, **params: object) -> None:
+        super().__init__(key)
+        self.key = key
+        self.params = params
+
+    def localized(self, lang: str = DEFAULT_LANG) -> str:
+        return translate(self.key, lang, **self.params)
 
 
 class Database:
@@ -66,7 +75,7 @@ class Database:
         version = int(conn.execute("PRAGMA user_version").fetchone()[0])
         if version > SCHEMA_VERSION:
             raise DatabaseError(
-                f"索引库版本 {version} 高于当前应用支持的版本 {SCHEMA_VERSION}"
+                "err.db_version_too_new", version=version, supported=SCHEMA_VERSION
             )
         if version == 0:
             # Fresh database. If there is an existing file from a failed run, back it up.
@@ -95,7 +104,7 @@ class Database:
         try:
             conn.executescript(sql)
         except sqlite3.Error as exc:
-            raise DatabaseError(f"初始化数据库失败: {exc}") from exc
+            raise DatabaseError("err.db_init_failed", error=str(exc)) from exc
 
     # -------------------------------------------------------------- accessors
 

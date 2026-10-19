@@ -23,6 +23,7 @@ from ..db.ops import (
     now_ts,
     upsert_document_file_fts,
 )
+from ..i18n import msg, set_index_lang
 from .chunker import build_chunks
 from .extractors import (
     CorruptDocumentError,
@@ -112,21 +113,30 @@ class IndexPipeline:
 
     # ------------------------------------------------------------------ jobs
 
+    def _refresh_index_lang(self) -> None:
+        """Follow the stored language setting for text baked into the index."""
+        try:
+            row = self.db.fetchone("SELECT value FROM settings WHERE key = 'language'")
+        except Exception:
+            row = None
+        set_index_lang(row["value"] if row is not None else None)
+
     def process_index_job(self, payload: dict[str, Any]) -> JobResult:
+        self._refresh_index_lang()
         raw_path = payload.get("path")
         source_id = payload.get("source_id")
         force = bool(payload.get("force", False))
         if not raw_path or not source_id:
-            return JobResult(error="任务缺少路径或来源")
+            return JobResult(error=msg("error.job_missing_path"))
         path = Path(raw_path)
         source = self.db.fetchone("SELECT * FROM sources WHERE id = ?", (source_id,))
         if source is None:
             return JobResult()
         root = Path(source["path"])
         if not root.is_dir():
-            return JobResult(action=RETRY, delay=60.0, error="来源目录暂不可用")
+            return JobResult(action=RETRY, delay=60.0, error=msg("error.source_unavailable"))
         if not _within(path, root):
-            return JobResult(error="文件不在已索引目录内")
+            return JobResult(error=msg("error.file_outside_sources"))
         if not path.exists() or not path.is_file():
             self._mark_missing_by_path(path)
             return JobResult()
@@ -134,7 +144,9 @@ class IndexPipeline:
         try:
             stat_info = _file_stat(path)
         except PermissionError as exc:
-            self._record_error_by_path(path, source_id, f"没有读取权限：{exc}", purge=False)
+            self._record_error_by_path(
+                path, source_id, msg("error.no_permission", error=str(exc)), purge=False
+            )
             return JobResult()
         except OSError as exc:
             return JobResult(action=RETRY, delay=30.0, error=str(exc))
@@ -143,7 +155,7 @@ class IndexPipeline:
             self._record_error_by_path(
                 path,
                 source_id,
-                f"文件超过 {MAX_FILE_BYTES // (1024 * 1024)} MB 上限，未索引",
+                msg("error.too_large", limit=MAX_FILE_BYTES // (1024 * 1024)),
                 purge=True,
             )
             return JobResult()
@@ -158,7 +170,9 @@ class IndexPipeline:
         protection = probe_file(path)
         if protection.state == "permission":
             self._record_error(
-                document_id, f"没有读取权限：{protection.error or ''}", purge=False
+                document_id,
+                msg("error.no_permission", error=protection.error or ""),
+                purge=False,
             )
             return JobResult()
         if protection.blocks_indexing:
@@ -168,7 +182,9 @@ class IndexPipeline:
         try:
             content_hash = _hash_file(path)
         except PermissionError as exc:
-            self._record_error(document_id, f"没有读取权限：{exc}", purge=False)
+            self._record_error(
+                document_id, msg("error.no_permission", error=str(exc)), purge=False
+            )
             return JobResult()
         except OSError as exc:
             return JobResult(action=RETRY, delay=10.0, error=str(exc))
@@ -207,10 +223,14 @@ class IndexPipeline:
                     ProtectionResult("encrypted", "corrupt_encrypted", str(exc)),
                 )
             else:
-                self._record_error(document_id, f"文件损坏或无法解析：{exc}", purge=True)
+                self._record_error(
+                    document_id, msg("error.corrupt", error=str(exc)), purge=True
+                )
             return JobResult()
         except PermissionError as exc:
-            self._record_error(document_id, f"没有读取权限：{exc}", purge=False)
+            self._record_error(
+                document_id, msg("error.no_permission", error=str(exc)), purge=False
+            )
             return JobResult()
         except ExtractionError as exc:
             self._record_error(document_id, str(exc), purge=True)
@@ -224,7 +244,9 @@ class IndexPipeline:
                     ProtectionResult("encrypted", "unknown_encrypted", str(exc)),
                 )
             else:
-                self._record_error(document_id, f"解析失败：{exc}", purge=True)
+                self._record_error(
+                    document_id, msg("error.parse_failed", error=str(exc)), purge=True
+                )
             return JobResult()
 
         try:
@@ -240,7 +262,7 @@ class IndexPipeline:
     def process_probe_job(self, payload: dict[str, Any]) -> JobResult:
         document_id = payload.get("document_id")
         if not document_id:
-            return JobResult(error="探测任务缺少 document_id")
+            return JobResult(error=msg("error.job_missing_document"))
         row = self.db.fetchone("SELECT * FROM documents WHERE id = ?", (document_id,))
         if row is None:
             return JobResult()
@@ -253,7 +275,7 @@ class IndexPipeline:
             with self.db.transaction() as conn:
                 conn.execute(
                     "UPDATE documents SET last_probe_at = ?, error = ? WHERE id = ?",
-                    (now_ts(), protection.error or "没有读取权限", document_id),
+                    (now_ts(), protection.error or msg("error.no_permission_short"), document_id),
                 )
             return JobResult()
         if protection.blocks_indexing:
@@ -417,8 +439,9 @@ class IndexPipeline:
         extracted.blocks = blocks
         if truncated:
             extracted.partial = True
-            if "文档内容超过单文档字符上限，索引已截断" not in extracted.warnings:
-                extracted.warnings.append("文档内容超过单文档字符上限，索引已截断")
+            warning = msg("warn.truncated")
+            if warning not in extracted.warnings:
+                extracted.warnings.append(warning)
 
         chunks = build_chunks(extracted)
         full_text = extracted.full_text
@@ -537,7 +560,7 @@ class IndexPipeline:
         self, document_id: int, path: Path, protection: ProtectionResult
     ) -> None:
         status = "encrypted" if protection.state == "encrypted" else "encrypted_suspected"
-        detail = protection.detail or protection.error or "检测到受保护内容"
+        detail = protection.detail or protection.error or msg("protect.detected")
         name_tokens = tokenize_for_fts(path.stem)
         path_tokens = tokenize_for_fts(self._rel_for_path(path, document_id))
         with self.db.transaction() as conn:

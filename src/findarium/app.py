@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.app import create_app
 from .config import APP_TITLE, DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE
+from .i18n import DEFAULT_LANG, translate
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,9 @@ class NativeBridge:
         return [str(result)]
 
 
-def start_server(app, port: int) -> tuple[ThreadedServer, threading.Thread]:
+def start_server(
+    app, port: int, lang: str = DEFAULT_LANG
+) -> tuple[ThreadedServer, threading.Thread]:
     config = uvicorn.Config(
         app,
         host="127.0.0.1",
@@ -103,7 +106,7 @@ def start_server(app, port: int) -> tuple[ThreadedServer, threading.Thread]:
             break
         time.sleep(0.05)
     if not server.started:
-        raise RuntimeError("本地服务启动失败")
+        raise RuntimeError(translate("err.service_failed", lang))
     return server, thread
 
 
@@ -115,6 +118,7 @@ def launch(
     dev_url: str | None = None,
     embedding_enabled: bool = True,
     token: str | None = None,
+    lang: str = DEFAULT_LANG,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -142,7 +146,7 @@ def launch(
         ctx.attach_default(embedding_enabled=embedding_enabled)
 
     chosen_port = port or find_free_port()
-    server, server_thread = start_server(app, chosen_port)
+    server, server_thread = start_server(app, chosen_port, lang)
     base_url = f"http://127.0.0.1:{chosen_port}"
     url = f"{base_url}/?token={token}"
     if dev_url:
@@ -165,8 +169,8 @@ def launch(
     try:
         import webview
     except Exception as exc:  # pragma: no cover - only without GUI deps
-        print(f"无法启动桌面窗口：{exc}")
-        print(f"请改用 --headless 访问 {url}")
+        print(translate("err.window_failed", lang, error=str(exc)))
+        print(translate("err.use_headless", lang, url=url))
         ctx.detach()
         server.should_exit = True
         server_thread.join(timeout=10)

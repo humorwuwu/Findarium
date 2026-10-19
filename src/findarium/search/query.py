@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 
 from ..config import EXT_GROUPS
+from ..i18n import DEFAULT_LANG, translate
 from ..indexing.tokenizer import (
     build_fts_query,
     normalize_text,
@@ -17,18 +18,43 @@ _DATE_TOKEN = re.compile(r"\b(?:modified|mtime|created|ctime|after|before|since)
 _SIZE_TOKEN = re.compile(r"\bsize:([<>]=?)\s*([0-9.]+)\s*(kb|mb|gb|b)?\b", re.IGNORECASE)
 
 _RELATIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"今天|今日"), "today"),
-    (re.compile(r"昨天|昨日"), "yesterday"),
+    (re.compile(r"今天|今日|\btoday\b", re.IGNORECASE), "today"),
+    (re.compile(r"昨天|昨日|\byesterday\b", re.IGNORECASE), "yesterday"),
     (re.compile(r"前天"), "day_before_yesterday"),
-    (re.compile(r"本周|这周|这个星期"), "this_week"),
-    (re.compile(r"上周|上个星期|上个周"), "last_week"),
-    (re.compile(r"本月|这个月"), "this_month"),
-    (re.compile(r"上个月|上月"), "last_month"),
-    (re.compile(r"今年|本年"), "this_year"),
-    (re.compile(r"去年|上年"), "last_year"),
+    (re.compile(r"本周|这周|这个星期|\bthis week\b", re.IGNORECASE), "this_week"),
+    (re.compile(r"上周|上个星期|上个周|\blast week\b", re.IGNORECASE), "last_week"),
+    (re.compile(r"本月|这个月|\bthis month\b", re.IGNORECASE), "this_month"),
+    (re.compile(r"上个月|上月|\blast month\b", re.IGNORECASE), "last_month"),
+    (re.compile(r"今年|本年|\bthis year\b", re.IGNORECASE), "this_year"),
+    (re.compile(r"去年|上年|\blast year\b", re.IGNORECASE), "last_year"),
 ]
 _RECENT_PATTERN = re.compile(r"最近\s*([0-9一二三四五六七八九十两]+)?\s*(天|日|周|星期|个月|月|年)?")
-_VAGUE_RECENT = re.compile(r"最近|上次|上回|之前|刚才|这几天|这几天|那天|那个")
+_RECENT_PATTERN_EN = re.compile(
+    r"\b(?:last|past|recent)\s+([0-9]+)\s+(days?|weeks?|months?|years?)\b",
+    re.IGNORECASE,
+)
+_CN_UNIT_KEYS = {
+    "天": "day",
+    "日": "day",
+    "周": "week",
+    "星期": "week",
+    "个月": "month",
+    "月": "month",
+    "年": "year",
+}
+_EN_UNIT_KEYS = {
+    "day": "day",
+    "days": "day",
+    "week": "week",
+    "weeks": "week",
+    "month": "month",
+    "months": "month",
+    "year": "year",
+    "years": "year",
+}
+_VAGUE_RECENT = re.compile(
+    r"最近|上次|上回|之前|刚才|这几天|这几天|那天|那个|\brecently\b", re.IGNORECASE
+)
 _ABSOLUTE_MONTH = re.compile(r"([0-9]{4})\s*年\s*([0-9]{1,2})\s*月")
 
 _FILLER_PATTERNS = [
@@ -167,7 +193,32 @@ def _parse_iso_date(raw: str, end_of_day: bool = False) -> datetime | None:
     return None
 
 
-def _apply_relative_dates(text: str, filters: SearchFilters, explanation: list[str]) -> tuple[str, float]:
+def _recent_span(text: str) -> tuple[int, str, str] | None:
+    """Find a "最近 N 天" / "last N days" span: (amount, unit key, matched text)."""
+    match = _RECENT_PATTERN.search(text)
+    if match and (match.group(1) or match.group(2)):
+        amount = _parse_cn_number(match.group(1) or "")
+        if amount:
+            return amount, _CN_UNIT_KEYS.get(match.group(2) or "天", "day"), match.group(0)
+    english = _RECENT_PATTERN_EN.search(text)
+    if english:
+        return int(english.group(1)), _EN_UNIT_KEYS[english.group(2).lower()], english.group(0)
+    return None
+
+
+def _unit_delta(amount: int, unit: str) -> timedelta:
+    if unit == "week":
+        return timedelta(weeks=amount)
+    if unit == "month":
+        return timedelta(days=amount * 30)
+    if unit == "year":
+        return timedelta(days=amount * 365)
+    return timedelta(days=amount)
+
+
+def _apply_relative_dates(
+    text: str, filters: SearchFilters, explanation: list[str], lang: str = DEFAULT_LANG
+) -> tuple[str, float]:
     now = datetime.now().astimezone()
     recency_boost = 0.0
     for pattern, keyword in _RELATIVE_PATTERNS:
@@ -177,7 +228,9 @@ def _apply_relative_dates(text: str, filters: SearchFilters, explanation: list[s
                 filters.after = _to_epoch(bounds[0])
                 filters.before = _to_epoch(bounds[1])
                 filters.date_field = "modified"
-                explanation.append(f"时间范围：{pattern.pattern.split('|')[0]}")
+                explanation.append(
+                    translate("explain.time_range", lang, value=translate(f"date.{keyword}", lang))
+                )
                 text = pattern.sub(" ", text)
 
     month_match = _ABSOLUTE_MONTH.search(text)
@@ -189,31 +242,39 @@ def _apply_relative_dates(text: str, filters: SearchFilters, explanation: list[s
             end = (start + timedelta(days=32)).replace(day=1)
             filters.after = _to_epoch(start)
             filters.before = _to_epoch(end)
-            explanation.append(f"时间范围：{year}年{month}月")
+            explanation.append(
+                translate(
+                    "explain.time_range",
+                    lang,
+                    value=translate("date.month", lang, year=year, month=month),
+                )
+            )
             text = _ABSOLUTE_MONTH.sub(" ", text)
 
-    recent_match = _RECENT_PATTERN.search(text)
-    if recent_match and (recent_match.group(1) or recent_match.group(2)):
-        amount = _parse_cn_number(recent_match.group(1) or "")
-        unit = recent_match.group(2) or "天"
-        if amount:
-            if unit in ("天", "日"):
-                delta = timedelta(days=amount)
-            elif unit in ("周", "星期"):
-                delta = timedelta(weeks=amount)
-            elif unit in ("个月", "月"):
-                delta = timedelta(days=amount * 30)
-            else:
-                delta = timedelta(days=amount)
-            filters.after = _to_epoch(now - delta)
-            filters.before = _to_epoch(now + timedelta(days=1))
-            explanation.append(f"时间范围：最近 {amount}{unit}")
-            recency_boost = 1.0
-            text = text.replace(recent_match.group(0), " ")
+    recent_span = _recent_span(text)
+    if recent_span is not None:
+        amount, unit, matched = recent_span
+        delta = _unit_delta(amount, unit)
+        filters.after = _to_epoch(now - delta)
+        filters.before = _to_epoch(now + timedelta(days=1))
+        explanation.append(
+            translate(
+                "explain.time_range",
+                lang,
+                value=translate(
+                    "date.recent",
+                    lang,
+                    amount=amount,
+                    unit=translate(f"date.unit.{unit}", lang),
+                ),
+            )
+        )
+        recency_boost = 1.0
+        text = text.replace(matched, " ")
 
     if _VAGUE_RECENT.search(text) and filters.after is None:
         recency_boost = max(recency_boost, 1.0)
-        explanation.append("偏好最近修改或打开过的文档")
+        explanation.append(translate("explain.prefer_recent", lang))
         text = _VAGUE_RECENT.sub(" ", text)
     return text, recency_boost
 
@@ -238,6 +299,7 @@ def parse_query(
     folder: str | None = None,
     encrypted: str | None = None,
     sort: str | None = None,
+    lang: str = DEFAULT_LANG,
 ) -> ParsedQuery:
     filters = SearchFilters()
     explanation: list[str] = []
@@ -259,7 +321,7 @@ def parse_query(
     folder_match = _FOLDER_TOKEN.search(text)
     if folder_match:
         filters.folder = folder_match.group(1) or folder_match.group(2)
-        explanation.append(f"目录：{filters.folder}")
+        explanation.append(translate("explain.folder", lang, value=filters.folder))
         text = _FOLDER_TOKEN.sub(" ", text)
 
     for match in _DATE_TOKEN.finditer(text):
@@ -273,7 +335,7 @@ def parse_query(
             filters.before = _to_epoch(parsed)
         else:
             filters.after = _to_epoch(parsed)
-        explanation.append(f"时间过滤：{match.group(0)}")
+        explanation.append(translate("explain.time_filter", lang, value=match.group(0)))
     text = _DATE_TOKEN.sub(" ", text)
 
     for match in _SIZE_TOKEN.finditer(text):
@@ -286,10 +348,10 @@ def parse_query(
             filters.size_min = size
         else:
             filters.size_max = size
-        explanation.append(f"大小过滤：{match.group(0)}")
+        explanation.append(translate("explain.size_filter", lang, value=match.group(0)))
     text = _SIZE_TOKEN.sub(" ", text)
 
-    text, recency_boost = _apply_relative_dates(text, filters, explanation)
+    text, recency_boost = _apply_relative_dates(text, filters, explanation, lang)
 
     if after:
         parsed = _parse_iso_date(after)

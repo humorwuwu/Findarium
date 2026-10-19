@@ -6,6 +6,7 @@ from typing import Any
 from openpyxl import load_workbook
 
 from ...config import MAX_EXCEL_ROWS_PER_CHUNK, MAX_EXCEL_ROWS_PER_SHEET, MAX_TEXT_CHARS
+from ...i18n import index_lang, msg, translate
 from .base import Block, CorruptDocumentError, ExtractedDocument, count_words
 
 
@@ -24,7 +25,9 @@ def extract(path: Path) -> ExtractedDocument:
     try:
         workbook = load_workbook(str(path), read_only=True, data_only=True)
     except Exception as exc:
-        raise CorruptDocumentError(f"无法打开 XLSX：{exc}") from exc
+        raise CorruptDocumentError(
+            msg("error.open_failed", format="XLSX", error=str(exc))
+        ) from exc
 
     props = workbook.properties
     title = (props.title or "").strip() or path.stem
@@ -50,7 +53,11 @@ def extract(path: Path) -> ExtractedDocument:
         ):
             if row_index > MAX_EXCEL_ROWS_PER_SHEET:
                 warnings.append(
-                    f"工作表“{sheet.title}”超过 {MAX_EXCEL_ROWS_PER_SHEET} 行，仅索引前部分内容"
+                    msg(
+                        "warn.xlsx_rows_exceeded",
+                        sheet=sheet.title,
+                        limit=MAX_EXCEL_ROWS_PER_SHEET,
+                    )
                 )
                 partial = True
                 break
@@ -73,8 +80,14 @@ def extract(path: Path) -> ExtractedDocument:
             row_end = group[-1][0]
             body = "\n".join(f"{number}: {line}" for number, line in group)
             if header_text:
-                body = f"列标题: {header_text}\n{body}"
-            location_label = f"{sheet.title} · 行 {row_start}-{row_end}"
+                body = f"{translate("text.column_header", index_lang())}: {header_text}\n{body}"
+            location_label = translate(
+                "location.sheet_rows",
+                index_lang(),
+                sheet=sheet.title,
+                start=row_start,
+                end=row_end,
+            )
             block = Block(
                 kind="sheet",
                 text=body,
@@ -91,7 +104,7 @@ def extract(path: Path) -> ExtractedDocument:
             total_chars += len(body)
             if total_chars > MAX_TEXT_CHARS:
                 partial = True
-                warnings.append("工作簿内容超过单文档字符上限，索引已截断")
+                warnings.append(msg("warn.truncated"))
                 break
         if total_chars > MAX_TEXT_CHARS:
             break

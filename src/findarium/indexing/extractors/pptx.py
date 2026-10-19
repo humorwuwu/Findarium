@@ -5,6 +5,7 @@ from pathlib import Path
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
+from ...i18n import index_lang, msg, translate
 from .base import Block, CorruptDocumentError, ExtractedDocument, count_words
 
 
@@ -36,7 +37,9 @@ def extract(path: Path) -> ExtractedDocument:
     try:
         presentation = Presentation(str(path))
     except Exception as exc:
-        raise CorruptDocumentError(f"无法打开 PPTX：{exc}") from exc
+        raise CorruptDocumentError(
+            msg("error.open_failed", format="PPTX", error=str(exc))
+        ) from exc
 
     props = presentation.core_properties
     title = (props.title or "").strip() or path.stem
@@ -58,7 +61,7 @@ def extract(path: Path) -> ExtractedDocument:
         except Exception:
             notes = ""
         if notes:
-            parts.append("备注:\n" + notes)
+            parts.append(f"{translate("text.notes", index_lang())}:\n" + notes)
         if not parts:
             continue
         slide_title = ""
@@ -73,12 +76,12 @@ def extract(path: Path) -> ExtractedDocument:
             Block(
                 kind="slide",
                 text=text,
-                location_label=f"第 {number} 张幻灯片",
+                location_label=translate("location.slide", index_lang(), number=number),
                 location_json={"slide": number},
                 heading_path=heading_path,
             )
         )
-        all_text.append(f"幻灯片 {number}\n{text}")
+        all_text.append(f"{translate("text.slide_number", index_lang(), number=number)}\n{text}")
 
     full_text = "\n\n".join(all_text)
     return ExtractedDocument(
