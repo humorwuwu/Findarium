@@ -59,7 +59,8 @@ jobs:
         with:
           ref: ${{ steps.v.outputs.tag }}
 
-      - uses: astral-sh/setup-uv@v10
+      # Full version, not @v10: astral-sh/setup-uv only publishes exact tags.
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           # Pinned to the uv that generated uv.lock, so a lock format bump
           # can't break a release on its own.
