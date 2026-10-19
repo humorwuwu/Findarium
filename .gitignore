@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+build-onefile/
+dist/
+dist-onefile/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+
+# Runtime data (default index library and any stray databases)
+FindariumData/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors / tooling
+.idea/
+.vscode/
+*.swp

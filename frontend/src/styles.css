@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-solid: #ffffff;
+  --border: rgba(15, 23, 42, 0.1);
+  --text: #1c1c1e;
+  --muted: #6b7280;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.12);
+  --mark: rgba(255, 214, 10, 0.45);
+  --danger: #ff3b30;
+  --success: #34c759;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --panel: rgba(38, 38, 42, 0.82);
+    --panel-solid: #26262a;
+    --border: rgba(255, 255, 255, 0.1);
+    --text: #f2f2f7;
+    --muted: #9ca3af;
+    --accent: #4da3ff;
+    --accent-soft: rgba(77, 163, 255, 0.16);
+    --mark: rgba(255, 214, 10, 0.35);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 128, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  backdrop-filter: blur(18px);
+}
+
+.solid-panel {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--accent-soft);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: white;
+}
+.btn.primary:hover {
+  filter: brightness(1.05);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn.ghost:hover {
+  background: var(--accent-soft);
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  outline: none;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.chip.neutral {
+  background: rgba(120, 120, 128, 0.14);
+  color: var(--muted);
+}
+.chip.warn {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
+}
+.chip.danger {
+  background: rgba(255, 59, 48, 0.14);
+  color: var(--danger);
+}
+.chip.success {
+  background: rgba(52, 199, 89, 0.16);
+  color: var(--success);
+}
+
+mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.sidebar-item:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.sidebar-item.active {
+  background: var(--accent);
+  color: white;
+}
+
+.result-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.result-card:hover {
+  background: var(--panel);
+  border-color: var(--border);
+}
+.result-card.selected {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
