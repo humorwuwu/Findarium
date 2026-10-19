@@ -59,6 +59,23 @@ uv run pytest
 cd frontend && npm run typecheck && npm run build
 ```
 
+## Syncing between machines
+
+Version control holds only source, tests, lock files and packaging assets
+(~2 MB, 97 files). The virtual environment, dependencies and build output are all
+regenerable:
+
+```bash
+./scripts/clean.sh    # drop dist/, build/, .venv/, node_modules/ and caches (1.4 GB → 3.6 MB)
+./scripts/setup.sh    # on a new machine: uv sync + npm ci + frontend build
+```
+
+Note: if your sync tool copies the whole project folder rather than just git, make
+sure it never includes `FindariumData/`. The app creates its index library next to
+the program by default, so running it from a synced folder puts the database in the
+sync set, and sync tools can corrupt SQLite's WAL files. Point `--library` at a local
+folder during development, or move the library in Settings.
+
 ## Packaging
 
 Double-clickable app bundle (onedir, faster startup — recommended):

@@ -54,6 +54,21 @@ uv run pytest
 cd frontend && npm run typecheck && npm run build
 ```
 
+## 多台电脑之间同步
+
+版本控制里只有源码、测试、锁文件和打包资源（约 2 MB，97 个文件）；虚拟环境、依赖和构建
+产物都可以重新生成：
+
+```bash
+./scripts/clean.sh    # 删掉 dist/、build/、.venv/、node_modules/ 和各种缓存（1.4 GB → 3.6 MB）
+./scripts/setup.sh    # 在新机器上恢复：uv sync + npm ci + 前端构建
+```
+
+注意：如果同步工具同步的是整个项目文件夹（而不只是 git），请确保它不包含 `FindariumData/`。
+程序默认把索引库建在程序所在目录下，所以从同步目录里直接运行会把数据库也放进同步范围，
+而同步工具可能损坏 SQLite 的 WAL 文件。开发时建议用 `--library` 指向一个本地目录，或在
+设置页把索引库迁移出去。
+
 ## 打包
 
 双击可用的 `.app`（onedir，启动更快，推荐）：
