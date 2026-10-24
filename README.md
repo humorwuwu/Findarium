@@ -60,8 +60,9 @@ cd frontend && npm run typecheck && npm run build
 产物都可以重新生成：
 
 ```bash
-./scripts/clean.sh    # 删掉 dist/、build/、.venv/、node_modules/ 和各种缓存（1.4 GB → 3.6 MB）
-./scripts/setup.sh    # 在新机器上恢复：uv sync + npm ci + 前端构建
+./scripts/clean.sh           # 删中间产物和缓存，保留 .venv 与 release/
+./scripts/clean.sh --deep    # 换机器同步前再删 .venv 和 node_modules
+./scripts/setup.sh           # 恢复：uv sync + npm ci + 前端构建
 ```
 
 注意：如果同步工具同步的是整个项目文件夹（而不只是 git），请确保它不包含 `FindariumData/`。
@@ -75,15 +76,15 @@ cd frontend && npm run typecheck && npm run build
 
 ```bash
 ./scripts/build.sh
-open dist/Findarium.app
+open "release/macos/Findarium.app"
 ```
 
 单文件可执行版本（onefile，只有一个 Mach-O 文件，首次启动较慢，因为要先解压到临时目录）：
 
 ```bash
 ./scripts/build-onefile.sh
-./dist-onefile/Findarium                      # 打开桌面窗口
-./dist-onefile/Findarium --headless --port 8811 --library ~/MaterialIndex
+./release/macos/Findarium-<版本>-macos-<arch>-onefile
+./release/macos/Findarium-<版本>-macos-<arch>-onefile --headless --port 8811 --library ~/MaterialIndex
 ```
 
 PyInstaller 产出的是未签名（ad-hoc）构建，适合本机使用；分发给其他 Mac 需要 Developer ID
@@ -117,8 +118,8 @@ Actions → Release → Run workflow 填版本号，标签必须已经推送过�
 
 默认情况下，索引库建在程序所在目录下：
 
-- `dist/FindariumData/`（`dist/Findarium.app` 旁边）
-- `dist-onefile/FindariumData/`（单文件可执行文件旁边）
+- `release/macos/FindariumData/`（`release/macos/Findarium.app` 旁边）
+- 单文件可执行版本若从 `release/macos/` 启动，索引库也在这个目录
 - `./FindariumData/`（从源码运行时）
 
 里面只有一个数据库 `index.sqlite3`，以及 `backups/`、`models/`、`logs/`。如果程序目录不可写

@@ -66,7 +66,8 @@ Version control holds only source, tests, lock files and packaging assets
 regenerable:
 
 ```bash
-./scripts/clean.sh    # drop dist/, build/, .venv/, node_modules/ and caches (1.4 GB → 3.6 MB)
+./scripts/clean.sh           # drop intermediates and caches; keep .venv and release/
+./scripts/clean.sh --deep    # also drop .venv and node_modules before syncing machines
 ./scripts/setup.sh    # on a new machine: uv sync + npm ci + frontend build
 ```
 
@@ -82,7 +83,7 @@ Double-clickable app bundle (onedir, faster startup — recommended):
 
 ```bash
 ./scripts/build.sh
-open dist/Findarium.app
+open "release/macos/Findarium.app"
 ```
 
 Single-file executable (onefile, one Mach-O file, slower first start because it extracts to a
@@ -90,8 +91,8 @@ temporary directory):
 
 ```bash
 ./scripts/build-onefile.sh
-./dist-onefile/Findarium                      # opens the desktop window
-./dist-onefile/Findarium --headless --port 8811 --library ~/MaterialIndex
+./release/macos/Findarium-<version>-macos-<arch>-onefile
+./release/macos/Findarium-<version>-macos-<arch>-onefile --headless --port 8811 --library ~/MaterialIndex
 ```
 
 PyInstaller produces unsigned/ad-hoc builds for local use. Distributing them to other Macs
@@ -128,8 +129,8 @@ Everyday checks (ruff, pytest, frontend typecheck and build) live in
 
 By default the index library is created next to the program:
 
-- `dist/FindariumData/` next to `dist/Findarium.app`
-- `dist-onefile/FindariumData/` next to the single-file executable
+- `release/macos/FindariumData/` next to `release/macos/Findarium.app`
+- the single-file executable, when launched from `release/macos/`, uses that same directory
 - `./FindariumData/` when running from a source checkout
 
 It contains the only database, `index.sqlite3`, plus `backups/`, `models/` and `logs/`. If the
